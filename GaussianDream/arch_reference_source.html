@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GaussianDream 训练数据流图 · 可拖拽（交互版）</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --panel:#ffffff; --line:#d9d7d0; --line-soft:#e8e6e0;
+    --text:#26251f; --text-2:#6b6a63; --text-3:#9a988e;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px}
+
+  header{height:52px;display:flex;align-items:center;gap:14px;padding:0 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);position:relative;z-index:20}
+  header h1{font-size:14px;font-weight:600;letter-spacing:.2px;white-space:nowrap}
+  header h1 span{color:var(--text-3);font-weight:400;margin-left:8px;font-size:12px}
+  .tools{display:flex;gap:6px;margin-left:auto;align-items:center}
+  button{font-family:var(--sans);font-size:12px;color:var(--text);background:#fff;
+    border:1px solid var(--line);border-radius:7px;padding:5px 11px;cursor:pointer;line-height:1.4}
+  button:hover{border-color:#b9b7ae;background:#faf9f6}
+  button.on{background:#26251f;color:#fff;border-color:#26251f}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;padding:6px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line-soft);position:relative;z-index:19}
+  .chip{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2);white-space:nowrap}
+  .chip i{width:9px;height:9px;border-radius:2px;display:block;flex:none}
+  .hint{font-size:11px;color:var(--text-3);padding:0 16px 6px;background:var(--panel)}
+
+  #stage{position:absolute;inset:52px 0 0 0;overflow:hidden;cursor:grab;touch-action:none}
+  #stage.panning{cursor:grabbing}
+  #world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+  #edges{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+  .casing{fill:none;stroke:#f6f5f2;stroke-width:5;stroke-linecap:round;opacity:1}
+  .edge{fill:none;stroke:#a9a7a0;stroke-width:1.6;opacity:.62}
+  .edge.dashed{stroke-dasharray:5 4}
+  .edge.hl{stroke:#26251f;stroke-width:2.6;opacity:1}
+  .edge.dim{opacity:.1}
+  .elabel{position:absolute;font-size:10.5px;color:var(--text-2);background:rgba(255,255,255,.92);
+    border:1px solid var(--line-soft);border-radius:5px;padding:1px 6px;white-space:nowrap;
+    transform:translate(-50%,-50%);pointer-events:none;font-family:var(--mono)}
+  .elabel.hide{display:none}
+
+  .node{position:absolute;width:232px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:9px 11px 10px;cursor:grab;user-select:none;
+    box-shadow:0 1px 2px rgba(38,37,31,.05);transition:box-shadow .12s,border-color .12s}
+  .node:hover{border-color:#b3b1a8;box-shadow:0 2px 8px rgba(38,37,31,.09)}
+  .node.dragging{cursor:grabbing;box-shadow:0 6px 18px rgba(38,37,31,.16);z-index:50}
+  .node.selected{border-color:#26251f;border-width:1.5px}
+  .node.dim{opacity:.35}
+  .node.frozen{border-style:dashed;border-width:1.5px}
+  .node.trainonly{border-style:dashed;border-width:1.5px;border-color:#c07a3a}
+  .node.trainonly::after{content:'推理丢弃';position:absolute;top:-9px;right:8px;font-size:9px;
+    color:#fff;background:#c07a3a;border-radius:8px;padding:1px 6px;letter-spacing:.5px}
+  .node.note{cursor:default;background:#fffdf5}
+  .nhead{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+  .nhead i{width:8px;height:8px;border-radius:2.5px;flex:none}
+  .ntitle{font-size:12.5px;font-weight:600;line-height:1.3}
+  .nsub{font-size:11px;color:var(--text-2);margin-bottom:5px;line-height:1.35}
+  .shapes{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 2px}
+  .shape{font-family:var(--mono);font-size:10.5px;background:#f1efe9;border:1px solid var(--line-soft);
+    border-radius:5px;padding:1.5px 6px;color:#4a4840;white-space:nowrap}
+  .shape.k{background:#eef2f7;border-color:#d5e0ec;color:#2c4a6b}
+  .shape.v{background:#eaf4ef;border-color:#cfe6da;color:#255a45}
+  .shape.d{background:#fbf1e2;border-color:#eed9b8;color:#7a5414}
+  .shape.l{background:#fdecec;border-color:#f2cfcf;color:#8a2b2b}
+  .shape.p{background:#fbeef3;border-color:#eed2de;color:#7d3355}
+  .shape.i{background:#f1efe9;border-color:#e0ded4;color:#5c5a50}
+  .shape.a{background:#eaf1fa;border-color:#d3e0f0;color:#26527f}
+  .shape.g{background:#eef0fb;border-color:#d7daf0;color:#3a3f80}
+  .shape.t{background:#fbeee7;border-color:#efd6c6;color:#8a4526}
+  .note-txt{font-size:10.5px;color:var(--text-3);line-height:1.45;margin-top:4px}
+  .code-ref{font-family:var(--mono);font-size:10px;color:#8a8a80;margin-top:5px;
+    border-top:1px dashed var(--line-soft);padding-top:4px;word-break:break-all}
+
+  #panel{position:absolute;top:52px;right:0;bottom:0;width:308px;background:var(--panel);
+    border-left:1px solid var(--line);padding:16px;overflow-y:auto;z-index:30;
+    transform:translateX(100%);transition:transform .18s ease}
+  #panel.open{transform:translateX(0)}
+  #panel h2{font-size:14px;font-weight:600;margin-bottom:2px}
+  #panel .ptag{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:20px;margin:6px 0 10px}
+  #panel .psub{font-size:12px;color:var(--text-2);margin-bottom:10px}
+  #panel h3{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;
+    letter-spacing:.6px;margin:14px 0 6px}
+  #panel .pbody{font-size:12.5px;line-height:1.65;color:var(--text)}
+  #panel .pshapes{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+  #panel .pconn{font-size:12px;line-height:1.7;color:var(--text-2)}
+  #panel .pconn b{color:var(--text);font-weight:500}
+  #panel .pcode{font-family:var(--mono);font-size:11px;background:#f6f5f2;border:1px solid var(--line-soft);
+    border-radius:7px;padding:7px 9px;color:#55534a;word-break:break-all;line-height:1.5}
+  #panel .close{position:absolute;top:12px;right:12px;border:none;background:none;font-size:16px;
+    color:var(--text-3);cursor:pointer;padding:2px 6px}
+  #panel .close:hover{color:var(--text)}
+
+  #formula{position:absolute;left:16px;bottom:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:10px 14px;z-index:25;max-width:min(620px,calc(100% - 340px));
+    box-shadow:0 2px 10px rgba(38,37,31,.07)}
+  #formula .ft{font-size:10.5px;font-weight:600;color:var(--text-3);letter-spacing:.6px;margin-bottom:5px}
+  #formula .fe{font-size:12.5px;line-height:1.9;font-family:var(--mono)}
+  #formula sub{font-size:9.5px}
+  #formula .w{color:#8a2b2b}
+  #zoomtag{position:absolute;right:16px;bottom:16px;font-family:var(--mono);font-size:11px;
+    color:var(--text-3);background:var(--panel);border:1px solid var(--line);border-radius:7px;
+    padding:3px 9px;z-index:25}
+  @media (max-width:760px){ #panel{width:100%} #formula{max-width:calc(100% - 32px)} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>GaussianDream 训练数据流<span>节点可拖拽 · 点击看详情 · 张量形状已标注</span></h1>
+  <div class="tools">
+    <button id="btn-fit">适应屏幕</button>
+    <button id="btn-reset">重置布局</button>
+    <button id="btn-export">导出布局</button>
+    <button id="btn-import">导入布局</button>
+    <button id="btn-labels" class="on">边标签: 开</button>
+    <button id="btn-help">说明</button>
+    <input id="import-file" type="file" accept=".json,application/json" style="display:none">
+  </div>
+</header>
+<div class="legend" id="legend"></div>
+<div class="hint">操作:拖节点移动 · 拖空白处平移 · 滚轮缩放 · 单击节点查看输入输出与源码位置 · 虚线 = 参数/查询引用 · 实线 = 数据流</div>
+
+<div id="stage">
+  <div id="world">
+    <div id="nlayer"></div>
+    <div id="llayer"></div>
+    <svg id="edges"><defs>
+      <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse" markerUnits="strokeWidth">
+        <path d="M0.6 0.6 L9.4 5 L0.6 9.4 Z" fill="#8a8880"/>
+      </marker>
+      <marker id="arw-hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse" markerUnits="strokeWidth">
+        <path d="M0.6 0.6 L9.4 5 L0.6 9.4 Z" fill="#26251f"/>
+      </marker>
+    </defs><g id="elayer"></g></svg>
+  </div>
+</div>
+
+<aside id="panel"><button class="close" id="panel-close">×</button><div id="panel-body"></div></aside>
+
+<div id="formula">
+  <div class="ft">总训练损失（Stage II · 发布 LIBERO 配置）</div>
+  <div class="fe">
+    L<sub>GD</sub> = λ<sub>d</sub>L<sub>depth</sub> + λ<sub>r</sub>L<sub>render</sub>
+    + Σ<sub>Δ∈{1..5}</sub> w<sub>Δ</sub>(λ<sub>d</sub><sup>Δ</sup>L<sub>depth</sub><sup>Δ</sup>
+    + λ<sub>r</sub><sup>Δ</sup>L<sub>render</sub><sup>Δ</sup>
+    + <span class="w">λ<sub>flow</sub></span>L<sub>flow</sub><sup>Δ</sup>)
+    <br>
+    L = L<sub>act</sub> + λ<sub>GD</sub>·L<sub>GD</sub>
+    &nbsp;&nbsp;<span class="w">[λ<sub>act</sub>=1.0, λ<sub>flow</sub>=15→有效1.5, λ<sub>d</sub>=0.1→0.01, λ<sub>r</sub>=0.2→0.005]</span>
+  </div>
+</div>
+<div id="zoomtag">100%</div>
+
+<script>
+/* ===================== 数据模型 ===================== */
+const BR = {
+  input : {c:'#5F5E5A', bg:'#F1EFE8', n:'输入数据'},
+  geo   : {c:'#3E6E8E', bg:'#E8F1F7', n:'几何编码器 / TGE'},
+  param : {c:'#993556', bg:'#FBEAF0', n:'可学习参数库 / query'},
+  vlm   : {c:'#534AB7', bg:'#EEEDFE', n:'VLA / prefix tokens'},
+  action: {c:'#185FA5', bg:'#E6F1FB', n:'动作分支'},
+  gs    : {c:'#3D5A80', bg:'#EBEFF6', n:'3D Gaussian 解码/渲染'},
+  loss  : {c:'#A32D2D', bg:'#FCEBEB', n:'损失'},
+  total : {c:'#501313', bg:'#F7C1C1', n:'总损失'},
+  note  : {c:'#8a8880', bg:'#FFFFFF', n:'说明'},
+};
+const SHAPE_CLASS = {input:'i', geo:'g', param:'p', vlm:'v', action:'a', gs:'g', loss:'l', total:'l', note:'i'};
+
+const NODES = [
+/* ---------- 输入 ---------- */
+{id:'in_rgb', br:'input', x:-430, y:-360, t:'时序多视角 RGB', s:'o_{t-K:t}',
+ shapes:['[B,T,3,224,224]','T=3 帧: {t-10,t-5,t}','3 个 agent 视角'],
+ note:'当前 + 稀疏历史，当前帧单独取出送 VLM；3 帧序列送 VGGT/TGE。',
+ detail:'GaussianDream 的 GaussianDream prefix 只用 temporal agent-view observation sequence 构造。注意 3 是 RGB 通道，不是视角数。当前帧 o_t 供 SigLIP 视觉塔和 appearance head 用；历史 3 帧供 VGGT 提几何。',
+ code:'policy.py:949 _preprocess_observation / config.py:1063'},
+{id:'in_lang', br:'input', x:-430, y:-90, t:'语言指令', s:'l',
+ shapes:['[B, 200]'], note:'经 tokenizer + embedding 成 200 个 prefix token。',
+ detail:'π0.5 配置 tokenizer 最大长度 200。文本 token 与图像 token、future token 一起进 PaliGemma prefix。',
+ code:'models/pi0_config.py:117-119'},
+{id:'in_depth', br:'input', x:-430, y:130, t:'伪深度 GT', s:'D_gt',
+ shapes:['[B,T,1,256,256]'], note:'相邻帧构造的 pseudo depth，作为深度/几何监督。',
+ detail:'Stage I 把 RGB 帧配上伪深度与伪 3D scene-flow 目标；训练时监督当前及未来 Gaussian 渲染的 depth。',
+ code:'config.py:1066-1068 / policy.py:1584-1597'},
+{id:'in_flow', br:'input', x:-430, y:320, t:'伪 3D 场景流 + mask', s:'flow_3d, valid_mask',
+ shapes:['flow: [B,FH,FW,3]','mask: [B,FH,FW]'], note:'监督未来高斯中心的位移 (ν_Δ)。',
+ detail:'flow loss 用 valid mask 对预测位移和伪场景流做 masked MSE；channel 权重 (1,1,2)。config.flow_loss_weight=15 是这条 3D 流的权重，不是动作 flow matching 的权重。',
+ code:'policy.py:2424-2501 / config.py:1079-1083'},
+{id:'in_action', br:'input', x:-430, y:1520, t:'真实动作序列', s:'a*',
+ shapes:['[B, 10, 32]'], note:'action horizon=10，动作维度 32；flow matching 目标。',
+ detail:'π0.5 配置 action_horizon=10、action_dim=32。训练时冉上噪声 x_t，目标速度 u_t=ε−a*。',
+ code:'config.py:1054-1061 / policy.py:3075-3083'},
+{id:'in_noise', br:'input', x:-430, y:1720, t:'噪声 + 时间', s:'ε, τ',
+ shapes:['ε: [B,10,32]','τ: 标量'], note:'τ ~ Beta(1.5,1.0)*0.999+0.001；每步重采。',
+ detail:'flow matching 把"直接回归动作"变成"学速度场"。x_t=τ·ε+(1−τ)·a*，u_t=ε−a*。',
+ code:'policy.py:3075-3083'},
+
+/* ---------- 几何 / TGE 路径 ---------- */
+{id:'vggt', br:'geo', x:-20, y:-440, t:'VGGT3DGS aggregator', s:'几何编码器 (预训练)',
+ shapes:['输入 [B,3,3,518,518]','多层 [B,3,1369,2048]'],
+ note:'只跑 VGGT 的 aggregator，不跑它自身的 depth/Gaussian head。',
+ detail:'GaussianFeatureEncoder 内部包 VGGT3DGSModel。3 帧 RGB resize 到 518×518 后过全局帧注意力，输出多层 patch token（每帧 37×37=1369 个，2048 维）。提供静态 3D 先验。',
+ code:'encoder.py:274,310-316,859-879,922-956'},
+{id:'mta_pool', br:'geo', x:370, y:-450, t:'MTA pooling', s:'多尺度 32×32 池化',
+ shapes:['每层 [B,3,1024,512]'], note:'VGGT patch 37×37 → 32×32，投影到 512 维 temporal token。',
+ detail:'对多个尺度的 VGGT 层特征（layer key 1,3,5,...,23）分别做 32×32 pooling 并投影成 512 维，得到 P^{(m)}，供 TGE 逐层融合。',
+ code:'encoder.py:428-436,763-823'},
+{id:'q_gd', br:'param', x:370, y:-90, t:'GaussianDream Queries', s:'Q_GD (可学习参数)',
+ shapes:['future_query_tokens [1,1024,2048]','spatial_pos [32,32,2048]'],
+ note:'1024 个可学习 query（=32×32 latent grid），对应论文的 Q_GD。',
+ detail:'代码里没有 GaussianDreamQuery 这个符号；论文里的 learnable GaussianDream queries 就是 PolicyModel.future_query_tokens，形状 [1,1024,2048]，随机初始化 *0.02。外加可学习空间位置 future_spatial_pos [32,32,2048] 和正弦位置。',
+ code:'policy.py:387-417,397-405'},
+{id:'q_proj', br:'param', x:370, y:130, t:'2048→512 投影', s:'future_query_to_mta',
+ shapes:['[B,1024,512]'], note:'query 降到 512 维 temporal 空间，再扩展 T=3 帧。',
+ detail:'Linear(2048,512)。之后 unsqueeze 扩展到 [B,3,1024,512]，与 VGGT MTA patch token 逐层拼接进 TGE。',
+ code:'policy.py:419,2055-2110'},
+{id:'tge', br:'geo', x:760, y:-300, t:'TGE 时序演化模块', s:'MotionAwareTemporalEncoder',
+ shapes:['12 blocks · 8 heads','输入 [B,3,1024+1024,512]'],
+ note:'逐层把 motion query 与 VGGT patch token 在 token 维拼接，交替做帧内空间 + 跨帧时序注意力。',
+ detail:'论文 Sec 3.3 的 Temporal Gaussian Evolution：2048→512 投影后与多帧 VGGT 特征融合，12 个 attention block（8 heads），交替 frame-wise spatial interaction 和 time-slot temporal attention（带可学习 temporal_bias [3,3]）。每个 block: cat([current_motion, patch_input]) → attn → 切回。',
+ code:'policy.py:122-200,203-285,260-271'},
+{id:'z_gd', br:'param', x:760, y:60, t:'GaussianDream Prefix', s:'Z_GD (当前步输出)',
+ shapes:['[B,1024,2048]'], note:'取 TGE 当前帧输出，512→2048 投影 + 位置编码 = 论文 Z_GD。',
+ detail:'mta_to_future: Linear(512,2048) 作用于 motion_tokens[:,T-1]（当前帧），再加空间/正弦位置编码，得到 [B,1024,2048] 的 GaussianDream prefix。它就是论文公式(1)(8)的 Z_GD = F_ω(o_{t-K:t}, Q_GD)。',
+ code:'policy.py:2112-2123,427'},
+
+/* ---------- VLM prefix 构造 ---------- */
+{id:'vlm_vision', br:'vlm', x:-20, y:-70, t:'视觉塔 (SigLIP/PaliGemma)', s:'图像 token',
+ shapes:['每视图 [B,256,2048]','3 视图 → 768 token'], note:'当前帧 3 视角各编码成 256 个 token。',
+ detail:'PaliGemmaWithExpertModel.embed_image 把每个视图编码成 256 个 2048 维 token。3 视图合计 768 个图像 token，和语言、future token 同处 2048 维 PaliGemma prefix 空间。',
+ code:'policy.py:2027-2041'},
+{id:'lang_emb', br:'vlm', x:-20, y:180, t:'文本 embedding', s:'语言 token',
+ shapes:['[B,200,2048]'], note:'200 个语言 token。', detail:'embed_language_tokens 把文本 token id 查表成 2048 维向量。',
+ code:'policy.py:1987-2001'},
+{id:'prefix_cat', br:'vlm', x:1150, y:120, t:'VLM Prefix 拼接', s:'image + lang + future',
+ shapes:['768 + 200 + 1024','= [B,1992,2048]'],
+ note:'图像 token → 语言 token → future(GD) token 的拼接顺序。',
+ detail:'最终 prefix 共 1992 个 token：PaliGemma 的 2048 维空间。VGGT 主 Gaussian embedding（每帧 256）没有追加进 prefix；world_token_count=0，没有另一组独立 world token。',
+ code:'policy.py:2125-2129,2008-2013,391-393'},
+
+/* ---------- 动作 suffix ---------- */
+{id:'mix_action', br:'action', x:370, y:1420, t:'动作混合', s:'x_t = τ·ε + (1−τ)·a*',
+ shapes:['[B,10,32]'], note:'流匹配的"当前位置"，τ 随机采。',
+ detail:'τ=0 是干净动作 a*，τ=1 是纯噪声 ε。训练时随机采 τ，让模型学整条速度场。',
+ code:'policy.py:3075-3083'},
+{id:'time_embed', br:'action', x:370, y:1620, t:'时间编码', s:'τ → adaRMS',
+ shapes:['sinusoidal → MLP'], note:'π0.5 用 adaRMS 把 τ 注入 action expert。',
+ detail:'use_adarms=[False,True]：VLM 侧不用，action expert 用。时间通过 sinusoidal + time_mlp 生成 adaRMS 调制参数。',
+ code:'policy.py:297-301,306-308,2161-2195'},
+{id:'suffix', br:'action', x:760, y:1450, t:'动作 token 投影', s:'action_in_proj',
+ shapes:['Linear(32→1024)','[B,10,1024]'], note:'带噪动作投到 action expert 的 1024 维空间。',
+ detail:'π0.5 配置 discrete_state_input=False 且 pi05 分支不把 state 加入 suffix，所以该配置下 state 实际不进动作 token。',
+ code:'policy.py:303-304,2135-2195'},
+
+/* ---------- 主干 ---------- */
+{id:'mask_note', br:'note', x:1150, y:640, t:'attention mask 可见关系', s:'blockwise causal',
+ note:'观测↔观测双向；future 看观测+future，观测不看 future；动作看全部 prefix，prefix 不看动作。',
+ detail:'make_att_2d_masks 造 prefix-LM 式块掩码：图像/语言互看；future token 能看图像/语言及彼此，但图像/语言不能反看 future；suffix(动作)看全部 prefix 与 suffix，prefix 不看 suffix。',
+ code:'policy.py:90-119,3129-3133'},
+{id:'backbone', br:'vlm', x:1540, y:400, t:'联合 Transformer 主干', s:'PaliGemma-2B + Gemma-300M',
+ shapes:['prefix [B,1992,2048]','suffix [B,10,1024]'],
+ note:'两套权重（VLM 2048 维 / action expert 1024 维）逐层拼接 QKV 做一次联合注意力，再按位置切回。',
+ detail:'PaliGemmaWithExpertModel.forward：每层把 prefix 与 suffix 的 Q/K/V 在 token 维拼接做 attention，再切回各自 MLP。VLM backbone 2048维，action expert 1024维并开 adaRMS。',
+ code:'gemma_pytorch.py:12-59,104,173-271 / policy.py:3135-3143'},
+
+/* ---------- 主干输出 ---------- */
+{id:'prefix_out', br:'vlm', x:1930, y:330, t:'H_prefix', s:'prefix 输出',
+ shapes:['[B,1992,2048]'], note:'切出后 1024 个 future 段送 Gaussian 解码分支。',
+ detail:'prefix_out 的 future 段 [B,1024,2048]（policy.py:3165-3169）是世界模型分支的输入。',
+ code:'policy.py:3162-3169'},
+{id:'act_hidden', br:'action', x:1930, y:1180, t:'action_hidden', s:'suffix 输出',
+ shapes:['[B,10,1024]'], note:'取最后 10 步动作 token。', detail:'suffix_out[:, -action_horizon:] = [B,10,1024]。',
+ code:'policy.py:3145'},
+
+/* ---------- 动作损失 ---------- */
+{id:'act_out', br:'action', x:2320, y:1180, t:'action_out_proj', s:'预测速度场',
+ shapes:['Linear(1024→32)','v_t: [B,10,32]'], note:'动作专家输出投影成预测速度。',
+ detail:'action_out_proj: nn.Linear(1024,32)，输出 v_t。',
+ code:'policy.py:304,3145-3147'},
+{id:'u_tau', br:'action', x:2320, y:1400, t:'目标速度', s:'u_t = ε − a*',
+ shapes:['[B,10,32]'], note:'flow matching 真值方向。', detail:'u_t = noise − actions。',
+ code:'policy.py:3083'},
+{id:'loss_action', br:'loss', x:2710, y:1300, t:'动作损失', s:'Flow Matching MSE',
+ shapes:['权重 1.0'], note:'MSE(v_t, u_t)。Stage I 关闭（freeze action），Stage II 开启。',
+ detail:'唯一主任务损失，权重固定 1.0，不乘 flow_loss_weight。前 9000 步 action_warmup 关闭。Stage1 freeze action expert 且关 action loss；Stage2 unfreeze。',
+ code:'policy.py:3145-3154, config.py:1088'},
+
+/* ---------- Gaussian 解码分支（训练辅助头） ---------- */
+{id:'reshape', br:'gs', x:2320, y:60, t:'Grid 重排', s:'1024 token → 32×32',
+ shapes:['[B,2048,32,32]'], note:'把 future hidden 排成空间网格，保留局部性（论文 32×32 latent grid）。',
+ detail:'SharedGaussianBackbone 把 [B,1024,2048] reshape 成 [B,2048,32,32] 再上采样。',
+ code:'decoder.py:71-95,345-422'},
+{id:'decoder_bb', br:'gs', x:2710, y:60, t:'Gaussian Decoder backbone', s:'F_G',
+ shapes:['[B,128,256,256]'], note:'32×32 → 64→128→256， distilled feature map。',
+ detail:'论文公式(4)：F_G = B_G(Grid(Z_GD)) ∈ R^{256×256×128}。共享 backbone 给静态头和速度头供特征。',
+ code:'decoder.py:71-95'},
+{id:'static_head', br:'gs', x:3100, y:-130, t:'静态高斯重建头', s:'R_ϕ → G_t',
+ trainOnly:true, note:'train-only 头：训练期可训练；推理时整头丢弃。',
+ shapes:['depth [B,1,256,256]','rot [B,65536,4]','scale [B,65536,3]','opacity [B,65536,1]','SH [B,65536,9]'],
+ detail:'GeometryHead 出 depth/rot/scale/opacity，AppearanceHead（条件 on 当前 RGB o_t）出 degree-1 SH。depth 经 8·sigmoid。反投影得到中心 µ，共 N=256×256=65536 个 Gaussian。论文 Sec 3.2 / 公式(5)(6)。',
+ code:'decoder.py:98-224,524-584'},
+{id:'vel_head', br:'gs', x:3100, y:230, t:'未来/动态高斯头', s:'D_ψ → Ĝ_{t+Δ}',
+ trainOnly:true, note:'train-only 头：horizon-conditioned，训练期可训练；推理时丢弃。',
+ shapes:['ν_Δ [B,65536,3]','Ĝ_{t+Δ}, Δ=1..5'],
+ detail:'VelocityGaussianHead 用 horizon embedding e_Δ（nn.Embedding）。输出中心位移 ν_Δ=tanh(head(F_G))·scale，再 µ̂=µ+ν_Δ·(offset_Δ/offset_1)。复用静态模板的非位置属性 θ_i。论文 Sec 3.3 / 公式(9)，监督 t+1..t+5。',
+ code:'decoder.py:287-342,679-787, policy.py:3268-3275'},
+{id:'rasterizer', br:'gs', x:3490, y:-40, t:'Gaussian Rasterizer', s:'多视角 RGB 渲染',
+ trainOnly:true, note:'train-only：训练期渲染出图算 loss；推理时不渲染。',
+ shapes:['render [B,3,224,224]'],
+ detail:'gaussian render（SSIM+L1+LPIPS+scale/opacity/edge 正则）。渲染当前与未来高斯，和 GT RGB 对齐。9 维 SH 按 sh_degree=1 pad 到 12 维。',
+ code:'gaussian_renderer.py:490,508-820,734-751'},
+
+/* ---------- 损失 ---------- */
+{id:'loss_depth', br:'loss', x:3880, y:-260, t:'深度损失', s:'L1',
+ shapes:['主 ×0.1→有效0.01','future aux ×0.02→0.002'], note:'depth map L1，当前 + 各 horizon 未来深度。',
+ detail:'主深度 F.l1_loss(depth_map, gt_depth)，发布配置 base 0.1，Stage2 乘 world multiplier 0.1 → 0.01。另有 FutureDepthHead aux（[B,1,128,128]）权重 0.02→0.002。',
+ code:'policy.py:1584-1597,1888-1909'},
+{id:'loss_flow', br:'loss', x:3880, y:-70, t:'3D 场景流损失', s:'masked MSE',
+ shapes:['×15.0 → 有效 1.5'], note:'预测中心位移 vs 伪 3D flow，valid mask 加权。',
+ detail:'raw_delta_xyz reshape 成 [B,256,256,3]，与 flow_3d 做 masked MSE，channel 权重 (1,1,2)。config.flow_loss_weight=15（Stage2 ×0.1=1.5）。',
+ code:'policy.py:2424-2501'},
+{id:'loss_render', br:'loss', x:3880, y:120, t:'渲染损失', s:'SSIM + L1 + LPIPS',
+ shapes:['0.85·SSIM + 0.15·L1','+ 0.1·LPIPS + reg','×0.2 → 有效 0.005'], note:'光度 + scale/opacity/edge 正则。',
+ detail:'compute_multi_view_rendering_loss：base=0.85·SSIM + 0.15·L1 + lpips_weight·LPIPS；内部 scale 0.001 / opacity 0.01 / edge-smooth 0.01 正则；外层 render_loss_weight=0.2，Stage2 再 ×0.05×0.1=0.005。',
+ code:'gaussian_renderer.py:848-881,912-1062, policy.py:1667-1683'},
+{id:'loss_total', br:'total', x:4270, y:640, t:'总损失 L', s:'L_act + λ_GD·L_GD',
+ shapes:['1 主 + 多项辅助'], note:'Action loss + 加权 Gaussian 辅助损失；反传只到允许训练的学生参数。',
+ detail:'论文公式(10) L_GD 与公式(11) L_act，总 L=L_act+λ_GD·L_GD。Stage1 只训 Gaussian 头（无 action）；Stage2 联合训 policy + 辅助 Gaussian loss（world multiplier 0.1）。Horizon 权重前 9000 步只用 t+1，之后 curriculum 到 uniform。',
+ code:'policy.py:3152,3227,3276-3290'},
+
+/* ---------- 说明 ---------- */
+{id:'note_train_infer', br:'note', x:3880, y:-480, t:'训练 vs 推理（非对称）', s:'关键设计',
+ note:'训练：完整 Gaussian 重建 + 未来预测 + 渲染/深度/流监督。推理：丢弃所有辅助头，只缓存 prefix 做 denoise。',
+ detail:'推理 sample_actions：仍跑 VGGT/MTA 生成 future query 并注入 prefix（这些保留），但 GaussianDecoder/static/velocity head、Rasterizer、depth/render/flow loss 全部不调用。prefix 用 use_cache=True prefill 一次，action expert 每步 denoise 复用缓存。所谓"推理只留 prefix"= 只复用 VLM prefix，action denoise 仍在。',
+ code:'policy.py:3312-3370,3372-3412'},
+];
+
+const EDGES = [
+  /* 输入 → 编码 */
+  ['in_rgb','vlm_vision','当前帧'],
+  ['in_rgb','vggt','3 帧序列'],
+  ['in_lang','lang_emb',''],
+  ['in_rgb','static_head','o_t (appearance)',true],
+
+  /* 几何 → TGE */
+  ['vggt','mta_pool','多层 patch'],
+  ['mta_pool','tge','P^{(m)} [B,3,1024,512]'],
+  ['q_gd','q_proj','Q_GD [1,1024,2048]'],
+  ['q_proj','tge','motion 512',true],
+  ['tge','z_gd','当前帧输出'],
+  ['z_gd','prefix_cat','future 1024',true],
+
+  /* VLM prefix */
+  ['vlm_vision','prefix_cat','图像 768'],
+  ['lang_emb','prefix_cat','语言 200'],
+  ['prefix_cat','backbone','prefix [B,1992,2048]'],
+  ['mask_note','backbone','mask 约束',true],
+
+  /* suffix */
+  ['in_action','mix_action','a*'],
+  ['in_noise','mix_action','ε, τ'],
+  ['in_noise','time_embed','τ'],
+  ['mix_action','suffix','x_t [B,10,32]'],
+  ['time_embed','suffix','adaRMS',true],
+  ['suffix','backbone','suffix [B,10,1024]'],
+
+  /* 主干输出 */
+  ['backbone','prefix_out',''],
+  ['backbone','act_hidden',''],
+  ['act_hidden','act_out',''],
+  ['in_noise','u_tau','ε'],
+  ['in_action','u_tau','a*'],
+  ['act_out','loss_action','v_t'],
+  ['u_tau','loss_action','u_t'],
+
+  /* Gaussian 分支 */
+  ['prefix_out','reshape','future hidden 1024'],
+  ['reshape','decoder_bb',''],
+  ['decoder_bb','static_head','F_G'],
+  ['decoder_bb','vel_head','F_G'],
+  ['static_head','vel_head','G_t 静态模板',true],
+  ['static_head','rasterizer','当前 G_t'],
+  ['vel_head','rasterizer','未来 Ĝ_Δ'],
+
+  /* 辅助损失 */
+  ['static_head','loss_depth','depth'],
+  ['decoder_bb','loss_depth','future depth aux',true],
+  ['in_depth','loss_depth','D_gt'],
+  ['vel_head','loss_flow','ν_Δ'],
+  ['in_flow','loss_flow','flow_3d'],
+  ['rasterizer','loss_render','render RGB'],
+  ['in_rgb','loss_render','GT RGB'],
+
+  /* 汇总 */
+  ['loss_action','loss_total','L_act'],
+  ['loss_depth','loss_total','λ·L_d'],
+  ['loss_flow','loss_total','λ·L_f'],
+  ['loss_render','loss_total','λ·L_r'],
+  ['note_train_infer','loss_total','',true],
+];
+
+/* ===================== 渲染 ===================== */
+const stage = document.getElementById('stage');
+const world = document.getElementById('world');
+const nlayer = document.getElementById('nlayer');
+const llayer = document.getElementById('llayer');
+const elayer = document.getElementById('elayer');
+const svg = document.getElementById('edges');
+const panel = document.getElementById('panel');
+const panelBody = document.getElementById('panel-body');
+const zoomtag = document.getElementById('zoomtag');
+
+const nodeById = {};
+const edgeEls = [];
+let selected = null;
+const LS_KEY = 'gaussiandream-flow-v1';
+
+(function(){
+  const lg = document.getElementById('legend');
+  Object.entries(BR).forEach(([k,v])=>{
+    if(k==='note') return;
+    const d = document.createElement('span');
+    d.className = 'chip';
+    d.innerHTML = `<i style="background:${v.c}"></i>${v.n}`;
+    lg.appendChild(d);
+  });
+  const extra = document.createElement('span');
+  extra.className = 'chip';
+  const tr = document.createElement('span');
+  tr.className = 'chip';
+  tr.innerHTML = `<i style="background:#fff;border:1.5px dashed #c07a3a"></i>橙虚线框 = train-only(仅训练期,推理丢弃)`;
+  lg.appendChild(tr);
+})();
+
+function shapeClass(n){ return SHAPE_CLASS[n.br] || 'i'; }
+
+function buildNodes(){
+  NODES.forEach(n=>{
+    n.w = 232;
+    const el = document.createElement('div');
+    el.className = 'node' + (n.frozen ? ' frozen' : '') + (n.trainOnly ? ' trainonly' : '') + (n.br==='note' ? ' note' : '');
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+    el.dataset.id = n.id;
+    const br = BR[n.br];
+    const shapes = (n.shapes||[]).map(s=>`<span class="shape ${shapeClass(n)}">${s}</span>`).join('');
+    el.innerHTML =
+      `<div class="nhead"><i style="background:${br.c}"></i><span class="ntitle">${n.t}</span></div>` +
+      (n.s ? `<div class="nsub">${n.s}</div>` : '') +
+      (shapes ? `<div class="shapes">${shapes}</div>` : '') +
+      (n.note ? `<div class="note-txt">${n.note}</div>` : '');
+    nlayer.appendChild(el);
+    n.el = el;
+    nodeById[n.id] = n;
+    el.addEventListener('pointerdown', e=>onNodeDown(e, n));
+    el.addEventListener('pointerenter', ()=>highlight(n.id, true));
+    el.addEventListener('pointerleave', ()=>highlight(n.id, false));
+  });
+  NODES.forEach(n=>{ n.h = n.el.offsetHeight; });
+}
+
+function anchor(n, side){
+  if(side==='r') return {x:n.x+n.w, y:n.y+n.h/2};
+  if(side==='l') return {x:n.x,     y:n.y+n.h/2};
+  if(side==='t') return {x:n.x+n.w/2, y:n.y};
+  return {x:n.x+n.w/2, y:n.y+n.h};
+}
+function pickSides(a,b){
+  const ac = {x:a.x+a.w/2, y:a.y+a.h/2}, bc = {x:b.x+b.w/2, y:b.y+b.h/2};
+  const dx = bc.x-ac.x, dy = bc.y-ac.y;
+  if(Math.abs(dx) >= Math.abs(dy)) return dx>0 ? ['r','l'] : ['l','r'];
+  return dy>0 ? ['b','t'] : ['t','b'];
+}
+function pathD(p1,p2,horiz){
+  if(horiz){
+    const k = Math.max(40, Math.min(150, Math.abs(p2.x-p1.x)*0.5));
+    return `M ${p1.x} ${p1.y} C ${p1.x+k} ${p1.y}, ${p2.x-k} ${p2.y}, ${p2.x} ${p2.y}`;
+  }
+  const k = Math.max(30, Math.min(110, Math.abs(p2.y-p1.y)*0.5));
+  return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y+k}, ${p2.x} ${p2.y-k}, ${p2.x} ${p2.y}`;
+}
+function bezMid(p1,p2,horiz){
+  let c1,c2;
+  if(horiz){
+    const k = Math.max(40, Math.min(150, Math.abs(p2.x-p1.x)*0.5));
+    c1 = {x:p1.x+k, y:p1.y}; c2 = {x:p2.x-k, y:p2.y};
+  }else{
+    const k = Math.max(30, Math.min(110, Math.abs(p2.y-p1.y)*0.5));
+    c1 = {x:p1.x, y:p1.y+k}; c2 = {x:p2.x, y:p2.y-k};
+  }
+  return {x:(p1.x+3*c1.x+3*c2.x+p2.x)/8, y:(p1.y+3*c1.y+3*c2.y+p2.y)/8};
+}
+
+const SIDE_OVERRIDE = {};
+function sidesFor(a,b){
+  const ov = SIDE_OVERRIDE[a.id+'>'+b.id];
+  if(ov) return [ov[0], ov[1]];
+  return pickSides(a,b);
+}
+function buildEdges(){
+  svg.setAttribute('width', 5000);
+  svg.setAttribute('height', 2400);
+  EDGES.forEach(([from,to,label,dashed])=>{
+    const a = nodeById[from], b = nodeById[to];
+    const casing = document.createElementNS('http://www.w3.org/2000/svg','path');
+    casing.setAttribute('class','casing');
+    elayer.appendChild(casing);
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('class','edge' + (dashed?' dashed':''));
+    p.setAttribute('marker-end','url(#arw)');
+    elayer.appendChild(p);
+    const lb = document.createElement('div');
+    lb.className = 'elabel';
+    lb.textContent = label;
+    if(!label) lb.style.display = 'none';
+    llayer.appendChild(lb);
+    edgeEls.push({a,b,p,casing,lb});
+  });
+  redrawEdges();
+}
+function redrawEdges(){
+  edgeEls.forEach(e=>{
+    const [sa,sb] = sidesFor(e.a,e.b);
+    const p1 = anchor(e.a,sa), p2 = anchor(e.b,sb);
+    const horiz = (sa==='r'||sa==='l');
+    const d = pathD(p1,p2,horiz);
+    e.p.setAttribute('d', d);
+    e.casing.setAttribute('d', d);
+    const m = bezMid(p1,p2,horiz);
+    if(horiz){ e.lb.style.left = m.x+'px'; e.lb.style.top = (m.y-16)+'px'; }
+    else     { e.lb.style.left = (m.x-18)+'px'; e.lb.style.top = (m.y-12)+'px'; }
+  });
+}
+function redrawNode(n){
+  n.el.style.left = n.x+'px';
+  n.el.style.top  = n.y+'px';
+  redrawEdges();
+}
+
+/* ===================== 交互 ===================== */
+const DEFAULT_VIEW = {x:-30, y:120, k:0.6};
+let view = {x:0, y:0, k:1};
+function applyView(){
+  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+  zoomtag.textContent = Math.round(view.k*100)+'%';
+  saveState();
+}
+function clampK(k){ return Math.max(0.2, Math.min(2.4, k)); }
+
+function onNodeDown(e, n){
+  if(e.button!==0) return;
+  e.stopPropagation();
+  n.el.setPointerCapture(e.pointerId);
+  const sx = e.clientX, sy = e.clientY, ox = n.x, oy = n.y;
+  let moved = 0;
+  n.el.classList.add('dragging');
+  const mv = ev=>{
+    const dx = (ev.clientX-sx)/view.k, dy = (ev.clientY-sy)/view.k;
+    moved = Math.max(moved, Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy));
+    n.x = ox+dx; n.y = oy+dy;
+    redrawNode(n);
+  };
+  const up = ()=>{
+    n.el.classList.remove('dragging');
+    n.el.releasePointerCapture(e.pointerId);
+    n.el.removeEventListener('pointermove', mv);
+    n.el.removeEventListener('pointerup', up);
+    if(moved < 5) selectNode(n);
+    saveState();
+  };
+  n.el.addEventListener('pointermove', mv);
+  n.el.addEventListener('pointerup', up);
+}
+
+stage.addEventListener('pointerdown', e=>{
+  if(e.target.closest('.node')) return;
+  closePanel();
+  stage.classList.add('panning');
+  const sx = e.clientX, sy = e.clientY, ox = view.x, oy = view.y;
+  const mv = ev=>{ view.x = ox + (ev.clientX-sx); view.y = oy + (ev.clientY-sy); applyView(); };
+  const up = ()=>{
+    stage.classList.remove('panning');
+    window.removeEventListener('pointermove', mv);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', mv);
+  window.addEventListener('pointerup', up);
+});
+
+stage.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const k2 = clampK(view.k * (e.deltaY<0 ? 1.12 : 0.89));
+  view.x = mx - (mx - view.x) * k2/view.k;
+  view.y = my - (my - view.y) * k2/view.k;
+  view.k = k2;
+  applyView();
+}, {passive:false});
+
+function highlight(id, on){
+  edgeEls.forEach(e=>{
+    const touch = (e.a.id===id || e.b.id===id);
+    if(on){
+      if(touch){ e.p.classList.add('hl'); e.p.classList.remove('dim'); e.p.setAttribute('marker-end','url(#arw-hl)'); }
+      else e.p.classList.add('dim');
+      if(touch && e.lb.textContent) e.lb.style.opacity = 1;
+    }else{
+      e.p.classList.remove('hl','dim');
+      e.p.setAttribute('marker-end','url(#arw)');
+      e.lb.style.opacity = '';
+    }
+  });
+  NODES.forEach(n=>{
+    if(!on) { n.el.classList.remove('dim'); return; }
+    const touch = edgeEls.some(e=>(e.a.id===id||e.b.id===id) && (e.a.id===n.id||e.b.id===n.id));
+    n.el.classList.toggle('dim', !touch && n.id!==id);
+  });
+}
+
+function selectNode(n){
+  NODES.forEach(m=>m.el.classList.remove('selected'));
+  n.el.classList.add('selected');
+  selected = n;
+  const br = BR[n.br];
+  const ins = [], outs = [];
+  EDGES.forEach(([f,t,l])=>{ if(t===n.id) ins.push(nodeById[f].t); if(f===n.id) outs.push(nodeById[t].t); });
+  panelBody.innerHTML =
+    `<h2>${n.t}</h2>` +
+    (n.s?`<div class="psub">${n.s}</div>`:'') +
+    `<span class="ptag" style="background:${br.bg};color:${br.c}">${br.n}${n.trainOnly?' · train-only(推理丢弃)':''}${n.frozen?' · frozen':''}</span>` +
+    (n.shapes?`<h3>张量形状</h3><div class="pshapes">${n.shapes.map(s=>`<span class="shape ${shapeClass(n)}">${s}</span>`).join('')}</div>`:'') +
+    (n.detail?`<h3>说明</h3><div class="pbody">${n.detail}</div>`:'') +
+    (n.note?`<h3>要点</h3><div class="pbody">${n.note}</div>`:'') +
+    (ins.length?`<h3>输入来自</h3><div class="pconn">${ins.map(x=>`<b>·</b> ${x}`).join('<br>')}</div>`:'') +
+    (outs.length?`<h3>输出到</h3><div class="pconn">${outs.map(x=>`<b>·</b> ${x}`).join('<br>')}</div>`:'') +
+    (n.code?`<h3>源码位置</h3><div class="pcode">${n.code}</div>`:'');
+  panel.classList.add('open');
+}
+function closePanel(){ panel.classList.remove('open'); NODES.forEach(m=>m.el.classList.remove('selected')); selected=null; }
+document.getElementById('panel-close').addEventListener('click', closePanel);
+
+function fit(){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  NODES.forEach(n=>{ x0=Math.min(x0,n.x); y0=Math.min(y0,n.y); x1=Math.max(x1,n.x+n.w); y1=Math.max(y1,n.y+n.h); });
+  const pad = 48;
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  const k = clampK(Math.min((sw-pad*2)/(x1-x0), (sh-pad*2)/(y1-y0)));
+  view.k = k;
+  view.x = (sw - (x1-x0)*k)/2 - x0*k;
+  view.y = (sh - (y1-y0)*k)/2 - y0*k;
+  applyView();
+}
+document.getElementById('btn-fit').addEventListener('click', fit);
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  localStorage.removeItem(LS_KEY);
+  NODES.forEach(n=>{ n.x=n.px; n.y=n.py; redrawNode(n); });
+  fit();
+});
+let showLabels = true;
+const btnLabels = document.getElementById('btn-labels');
+btnLabels.addEventListener('click', ()=>{
+  showLabels = !showLabels;
+  btnLabels.classList.toggle('on', showLabels);
+  btnLabels.textContent = showLabels ? '边标签: 开' : '边标签: 关';
+  edgeEls.forEach(ed=>{ ed.lb.classList.toggle('hide', !showLabels); });
+});
+document.getElementById('btn-help').addEventListener('click', ()=>{
+  panelBody.innerHTML =
+    `<h2>使用说明</h2>
+     <div class="pbody" style="line-height:2">
+     <b>拖动节点</b>:按住节点拖动，自动重排连线。<br>
+     <b>平移画布</b>:在空白处按住拖动。<br>
+     <b>缩放</b>:滚轮(以鼠标位置为中心)。<br>
+     <b>查看详情</b>:单击任意节点，右侧显示张量形状、输入输出连接与源码位置。<br>
+     <b>高亮链路</b>:鼠标悬停节点，相关连边加粗、其余淡出。<br>
+     <b>重置布局</b>:恢复初始排版并清除本地记录。<br><br>
+     <b>导出布局</b>:把当前节点坐标+视野下载成 JSON。<br>
+     <b>导入布局</b>:选择之前导出的 JSON，一键还原。<br><br>
+     <b>实线</b> = 数据流;<b>虚线</b> = 参数/查询引用(如 Q_GD 作为 query)。<br>
+     <b>橙虚线框节点</b> = train-only 头：训练期可训练，推理时整头丢弃。<br><br>
+     本图依据 GaussianDream 论文(arXiv:2605.20752)方法章节 + 官方代码 github.com/TuojingAI/GaussianDream 绘制。
+     </div>`;
+  panel.classList.add('open');
+});
+
+function exportLayout(){
+  const pos = {};
+  NODES.forEach(n=>{ pos[n.id] = [Math.round(n.x), Math.round(n.y)]; });
+  const data = { key: LS_KEY, savedAt: new Date().toISOString(), pos, view };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'gaussiandream-flow-layout.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function applyLayout(st){
+  if(st.pos) NODES.forEach(n=>{ if(st.pos[n.id]){ n.px = n.x; n.py = n.y; n.x = st.pos[n.id][0]; n.y = st.pos[n.id][1]; } });
+  if(st.view) view = st.view;
+  NODES.forEach(redrawNode);
+  applyView();
+  saveState();
+}
+function importLayout(file){
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    try{
+      const st = JSON.parse(fr.result);
+      if(!st.pos) throw new Error('缺少 pos 字段');
+      applyLayout(st);
+      alert('布局已导入并保存到本地浏览器。');
+    }catch(err){ alert('导入失败:' + err.message); }
+  };
+  fr.readAsText(file);
+}
+document.getElementById('btn-export').addEventListener('click', exportLayout);
+const importInput = document.getElementById('import-file');
+document.getElementById('btn-import').addEventListener('click', ()=> importInput.click());
+importInput.addEventListener('change', ()=>{ if(importInput.files[0]) importLayout(importInput.files[0]); importInput.value=''; });
+
+function saveState(){
+  try{
+    const pos = {};
+    NODES.forEach(n=>{ pos[n.id] = [Math.round(n.x), Math.round(n.y)]; });
+    localStorage.setItem(LS_KEY, JSON.stringify({pos, view}));
+  }catch(e){}
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    const st = JSON.parse(raw);
+    if(st.pos) NODES.forEach(n=>{ if(st.pos[n.id]){ n.px = n.x; n.py = n.y; n.x = st.pos[n.id][0]; n.y = st.pos[n.id][1]; } });
+    if(st.view) view = st.view;
+    return true;
+  }catch(e){ return false; }
+}
+
+NODES.forEach(n=>{ n.px = n.x; n.py = n.y; });
+buildNodes();
+buildEdges();
+const restored = loadState();
+NODES.forEach(redrawNode);
+if(!restored) view = Object.assign({}, DEFAULT_VIEW);
+applyView();
+window.addEventListener('resize', ()=>{ });
+</script>
+</body>
+</html>
