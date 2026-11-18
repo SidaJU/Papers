@@ -1,0 +1,29 @@
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Nested Git metadata from source snapshots
+**/.git/
+
+# Local tool caches and generated artifacts
+**/.codebuddy/
+**/.playwright-cli/
+**/.architecture-work/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.cache/
+**/.venv/
+**/venv/
+**/node_modules/
+**/.idea/
+**/.vscode/
+*.pyc
+*.pyo
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo

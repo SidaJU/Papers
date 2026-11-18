@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "collected_on": "2026-11-18",
+  "work": "SLA / Spatial Forcing",
+  "scope": "论文原文，以及官方仓库当前提交的全部跟踪源码和实际声明的子模块；不含模型权重、外部数据集、运行环境或完整 Git 历史。",
+  "papers": [
+    {
+      "title": "SLA: Scaling Spatial-Language-Action Model via Continual Pre-training",
+      "file": "SLA.pdf",
+      "arxiv_id": "2611.08373v1",
+      "source_url": "https://arxiv.org/pdf/2611.08373v1",
+      "pages": 31,
+      "bytes": 29159823,
+      "sha256": "552c3677c12a3822700eb49c7f8ef2831005ed997104f72e2ddd7d5024f8f48a"
+    },
+    {
+      "title": "Spatial Forcing: Implicit Spatial Representation Alignment for Vision-Language-Action Model",
+      "file": "Spatial-Forcing.pdf",
+      "arxiv_id": "2510.12276v2",
+      "source_url": "https://arxiv.org/pdf/2510.12276v2",
+      "pages": 19,
+      "bytes": 1990671,
+      "sha256": "c7d15ca562f5639ab88c60e7de0de4c34965e3c57710e79febfa249b8bddada5"
+    }
+  ],
+  "code": {
+    "path": "code",
+    "repository": "https://github.com/OpenHelix-Team/Spatial-Forcing",
+    "branch_at_collection": "master",
+    "commit": "18896e757647ed9c2a68816b35a7100afda6e287",
+    "commit_date": "2026-11-13",
+    "archive_url": "https://codeload.github.com/OpenHelix-Team/Spatial-Forcing/tar.gz/18896e757647ed9c2a68816b35a7100afda6e287",
+    "storage": "普通源码文件快照；无嵌套 .git，不注册为 Papers 的子模块；保留上游原始字节和换行。",
+    "upstream_tracked_files_excluding_submodules": 597,
+    "verified_against_git_blobs": true,
+    "unresolved_lfs_pointers": 0,
+    "entry_directories": ["code/SLA", "code/openpi-SF", "code/openvla-SF"],
+    "root_license": "MIT",
+    "root_license_file": "code/LICENSE",
+    "license_note": "各嵌入组件的许可证原样保留；SLA 和第三方组件的条款需分别查看，代码许可不自动适用于论文、权重或数据。",
+    "submodules": [
+      {
+        "upstream_path": "SLA/third_party/libero_plus",
+        "local_path": "code/SLA/third_party/libero_plus",
+        "repository": "https://github.com/sylvestf/LIBERO-plus",
+        "commit": "4976dc30028e805ff8094b55501d532c48fec182",
+        "archive_url": "https://codeload.github.com/sylvestf/LIBERO-plus/tar.gz/4976dc30028e805ff8094b55501d532c48fec182",
+        "storage": "已按父仓库固定提交展开为普通文件，不是空目录或 gitlink。",
+        "tracked_files": 20964,
+        "verified_against_git_blobs": true
+      }
+    ]
+  },
+  "release_status": {
+    "evidence": ["code/readme.md", "code/SLA/README.md"],
+    "relationship": "同一官方仓库提供 SLA 与 Spatial Forcing 两项相关工作的实现，故同时保存两篇独立论文。",
+    "readme_marks_available": [
+      "SLA LIBERO-Plus post-training and evaluation",
+      "SLA RoboTwin post-training and evaluation",
+      "SLA Continual pre-training corpus",
+      "SLA RoboDojo-Real post-training and evaluation",
+      "Spatial Forcing openvla-SF and openpi-SF implementations"
+    ],
+    "readme_marks_pending": ["Training efficiency optimization", "Continual pre-training data"],
+    "root_readme_future_work": "SLA v2、正式 RoboDojo / RoboCasa365 结果与检查点仍被列为后续计划。",
+    "qualification": "已完整保存所选提交的源码，不代表全部训练数据、未来版本或所有实验复现条件均已公开或备齐。"
+  },
+  "external_resources_not_downloaded": {
+    "project_pages": ["https://embodiedsla.github.io/", "https://spatial-forcing.github.io/"],
+    "model_and_data_collections": [
+      "https://huggingface.co/collections/haofuly/sla-collection",
+      "https://huggingface.co/collections/haofuly/spatial-forcing"
+    ],
+    "separate_integration_code_referenced_by_readme": [
+      "https://github.com/XPolicyLab/XPolicyLab/pull/235",
+      "https://github.com/XPolicyLab/XPolicyLab/pull/237"
+    ],
+    "note": "仅保存上述外部入口；未额外镜像 XPolicyLab、安装软件依赖、下载权重、训练数据或另行发布的 LIBERO 仿真资产包。"
+  },
+  "execution": {
+    "environment_installed": false,
+    "training_or_inference_run": false,
+    "upstream_code_modified": false,
+    "committed_or_pushed_by_this_collection": false
+  }
+}

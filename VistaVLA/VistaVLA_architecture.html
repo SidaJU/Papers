@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VistaVLA 训练与推理数据流图 · 可拖拽（交互版）</title>
+<link rel="icon" href="data:,">
+<style>
+  :root{
+    --bg:#f6f5f2; --panel:#ffffff; --line:#d9d7d0; --line-soft:#e8e6e0;
+    --text:#26251f; --text-2:#6b6a63; --text-3:#9a988e;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px}
+
+  header{height:52px;display:flex;align-items:center;gap:14px;padding:0 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);position:relative;z-index:20}
+  header h1{font-size:14px;font-weight:600;letter-spacing:.2px;white-space:nowrap}
+  header h1 span{color:var(--text-3);font-weight:400;margin-left:8px;font-size:12px}
+  .tools{display:flex;gap:6px;margin-left:auto;align-items:center}
+  button{font-family:var(--sans);font-size:12px;color:var(--text);background:#fff;
+    border:1px solid var(--line);border-radius:7px;padding:5px 11px;cursor:pointer;line-height:1.4}
+  button:hover{border-color:#b9b7ae;background:#faf9f6}
+  button.on{background:#26251f;color:#fff;border-color:#26251f}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;padding:6px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line-soft);position:relative;z-index:19}
+  .chip{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2);white-space:nowrap}
+  .chip i{width:9px;height:9px;border-radius:2px;display:block;flex:none}
+  .hint{font-size:11px;color:var(--text-3);padding:0 16px 6px;background:var(--panel)}
+
+  #stage{position:absolute;inset:52px 0 0 0;overflow:hidden;cursor:grab;touch-action:none}
+  #stage.panning{cursor:grabbing}
+  #world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+  #edges{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+  .casing{fill:none;stroke:#f6f5f2;stroke-width:5;stroke-linecap:round;opacity:1}
+  .edge{fill:none;stroke:#a9a7a0;stroke-width:1.6;opacity:.62}
+  .edge.dashed{stroke-dasharray:5 4}
+  .edge.hl{stroke:#26251f;stroke-width:2.6;opacity:1}
+  .edge.dim{opacity:.1}
+  .elabel{position:absolute;font-size:10.5px;color:var(--text-2);background:rgba(255,255,255,.92);
+    border:1px solid var(--line-soft);border-radius:5px;padding:1px 6px;white-space:nowrap;
+    transform:translate(-50%,-50%);pointer-events:none;font-family:var(--mono)}
+  .elabel.hide{display:none}
+
+  .node{position:absolute;width:232px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:9px 11px 10px;cursor:grab;user-select:none;
+    box-shadow:0 1px 2px rgba(38,37,31,.05);transition:box-shadow .12s,border-color .12s}
+  .node:hover{border-color:#b3b1a8;box-shadow:0 2px 8px rgba(38,37,31,.09)}
+  .node.dragging{cursor:grabbing;box-shadow:0 6px 18px rgba(38,37,31,.16);z-index:50}
+  .node.selected{border-color:#26251f;border-width:1.5px}
+  .node.dim{opacity:.35}
+  .node.frozen{border-style:dashed;border-width:1.5px}
+  .node.note{cursor:default;background:#fffdf5}
+  .nhead{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+  .nhead i{width:8px;height:8px;border-radius:2.5px;flex:none}
+  .ntitle{font-size:12.5px;font-weight:600;line-height:1.3}
+  .nsub{font-size:11px;color:var(--text-2);margin-bottom:5px;line-height:1.35}
+  .shapes{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 2px}
+  .shape{font-family:var(--mono);font-size:10.5px;background:#f1efe9;border:1px solid var(--line-soft);
+    border-radius:5px;padding:1.5px 6px;color:#4a4840;white-space:nowrap}
+  .shape.k{background:#eef2f7;border-color:#d5e0ec;color:#2c4a6b}
+  .shape.v{background:#eaf4ef;border-color:#cfe6da;color:#255a45}
+  .shape.d{background:#fbf1e2;border-color:#eed9b8;color:#7a5414}
+  .shape.l{background:#fdecec;border-color:#f2cfcf;color:#8a2b2b}
+  .shape.p{background:#fbeef3;border-color:#eed2de;color:#7d3355}
+  .shape.i{background:#f1efe9;border-color:#e0ded4;color:#5c5a50}
+  .shape.a{background:#eaf1fa;border-color:#d3e0f0;color:#26527f}
+  .note-txt{font-size:10.5px;color:var(--text-3);line-height:1.45;margin-top:4px}
+  .code-ref{font-family:var(--mono);font-size:10px;color:#8a8a80;margin-top:5px;
+    border-top:1px dashed var(--line-soft);padding-top:4px;word-break:break-all}
+
+  #panel{position:absolute;top:52px;right:0;bottom:0;width:308px;background:var(--panel);
+    border-left:1px solid var(--line);padding:16px;overflow-y:auto;z-index:30;
+    transform:translateX(100%);transition:transform .18s ease}
+  #panel.open{transform:translateX(0)}
+  #panel h2{font-size:14px;font-weight:600;margin-bottom:2px}
+  #panel .ptag{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:20px;margin:6px 0 10px}
+  #panel .psub{font-size:12px;color:var(--text-2);margin-bottom:10px}
+  #panel h3{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;
+    letter-spacing:.6px;margin:14px 0 6px}
+  #panel .pbody{font-size:12.5px;line-height:1.65;color:var(--text)}
+  #panel .pshapes{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+  #panel .pconn{font-size:12px;line-height:1.7;color:var(--text-2)}
+  #panel .pconn b{color:var(--text);font-weight:500}
+  #panel .pcode{font-family:var(--mono);font-size:11px;background:#f6f5f2;border:1px solid var(--line-soft);
+    border-radius:7px;padding:7px 9px;color:#55534a;word-break:break-all;line-height:1.5}
+  #panel .close{position:absolute;top:12px;right:12px;border:none;background:none;font-size:16px;
+    color:var(--text-3);cursor:pointer;padding:2px 6px}
+  #panel .close:hover{color:var(--text)}
+
+  #formula{position:absolute;left:16px;bottom:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:10px 14px;z-index:25;max-width:min(560px,calc(100% - 340px));
+    box-shadow:0 2px 10px rgba(38,37,31,.07)}
+  #formula .ft{font-size:10.5px;font-weight:600;color:var(--text-3);letter-spacing:.6px;margin-bottom:5px}
+  #formula .fe{font-size:13px;line-height:1.9;font-family:var(--mono)}
+  #formula sub{font-size:9.5px}
+  #formula .w{color:#8a2b2b}
+  #zoomtag{position:absolute;right:16px;bottom:16px;font-family:var(--mono);font-size:11px;
+    color:var(--text-3);background:var(--panel);border:1px solid var(--line);border-radius:7px;
+    padding:3px 9px;z-index:25}
+  @media (max-width:760px){ #panel{width:100%} #formula{max-width:calc(100% - 32px)} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>VistaVLA 训练与推理数据流<span>节点可拖拽 · 点击看详情 · 张量形状与PDF依据已标注</span></h1>
+  <div class="tools">
+    <button id="btn-fit">适应屏幕</button>
+    <button id="btn-reset">重置布局</button>
+    <button id="btn-export">导出布局</button>
+    <button id="btn-import">导入布局</button>
+    <button id="btn-labels" class="on">边标签: 开</button>
+    <button id="btn-help">说明</button>
+    <input id="import-file" type="file" accept=".json,application/json" style="display:none">
+  </div>
+</header>
+<div class="legend" id="legend"></div>
+<div class="hint">操作:拖节点移动 · 拖空白处平移 · 滚轮缩放 · 单击节点查看输入输出与PDF依据 · 虚线 = 监督/参数/说明,实线 = 数据流</div>
+
+<div id="stage">
+  <div id="world">
+    <div id="nlayer"></div>
+    <div id="llayer"></div>
+    <svg id="edges"><defs>
+      <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse" markerUnits="strokeWidth">
+        <path d="M0.6 0.6 L9.4 5 L0.6 9.4 Z" fill="#8a8880"/>
+      </marker>
+      <marker id="arw-hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse" markerUnits="strokeWidth">
+        <path d="M0.6 0.6 L9.4 5 L0.6 9.4 Z" fill="#26251f"/>
+      </marker>
+    </defs><g id="elayer"></g></svg>
+  </div>
+</div>
+
+<aside id="panel"><button class="close" id="panel-close">×</button><div id="panel-body"></div></aside>
+
+<div id="formula">
+  <div class="ft">VistaVLA 论文披露的训练目标（不是统一总loss）</div>
+  <div class="fe">
+    L<sub>stage1</sub> = <span class="w">λ<sub>rgb</sub></span>·L<sub>rgb</sub> + <span class="w">λ<sub>dep</sub></span>·L<sub>dep</sub><br>
+    L<sub>stage2</sub> = L<sub>stage1</sub> + <span class="w">λ<sub>feat</sub></span>·L<sub>feat</sub><br>
+    L<sub>act</sub> = Σ<sub>t</sub> ‖â<sub>t</sub> − a<sub>t</sub>‖<sub>1</sub>
+  </div>
+</div>
+
+<div id="zoomtag">100%</div>
+
+<script>
+/* ===================== 数据模型 ===================== */
+const BR = {
+  input  : {c:'#5F5E5A', bg:'#F1EFE8', n:'输入 / 标定'},
+  teacher: {c:'#854F0B', bg:'#FAEEDA', n:'教师特征 / AE'},
+  gs     : {c:'#0F6E56', bg:'#E1F5EE', n:'语义 Gaussian / 渲染'},
+  mtq    : {c:'#993556', bg:'#FBEAF0', n:'Merge-then-Query'},
+  vlm    : {c:'#534AB7', bg:'#EEEDFE', n:'VLA / prefix tokens'},
+  action : {c:'#185FA5', bg:'#E6F1FB', n:'动作分支'},
+  loss   : {c:'#A32D2D', bg:'#FCEBEB', n:'损失'},
+  total  : {c:'#501313', bg:'#F7C1C1', n:'边界 / 未披露'},
+  note   : {c:'#8a8880', bg:'#FFFFFF', n:'说明'},
+};
+const SHAPE_CLASS = {input:'i', teacher:'d', gs:'v', mtq:'p', vlm:'v', action:'a', loss:'l', total:'l', note:'i'};
+
+
+const NODES = [
+/* ---------- Stage I: 语义Gaussian表征训练 ---------- */
+{id:'train_rgbd', br:'input', x:-340, y:-280, t:'训练RGB-D上下文 / 目标视角', s:'两路context + 第三novel view',
+ shapes:['2 × RGB-D + calibrated poses','target RGB / depth / teacher F'],
+ note:'表征训练需要深度和第三目标视角；并不表示在线策略读取传感器GT深度。',
+ detail:'Stage I训练使用两路标定RGB-D上下文，并渲染第三个目标视角来施加RGB、深度和紧凑教师特征监督。第三novel target视图不是在线推理的第三路策略相机；腕部相机属于后续VLA输入。',
+ code:'PDF p4-p5 §3.1 / Figure 2'},
+{id:'foundation', br:'teacher', x:300, y:-280, t:'SigLIP2 + DINOv2-Large', s:'稠密2D教师特征',
+ shapes:['concat width = 2176'],
+ note:'语言对齐语义与鲁棒视觉描述子拼接；分别维度及冻结状态未给。',
+ detail:'对每个训练帧抽取两类foundation视觉特征并拼接为2176维教师特征。论文未写两个编码器各自宽度、是否冻结或具体型号配置，不按其他项目补齐。',
+ code:'PDF p4 §3.1 Compact teacher feature space'},
+{id:'ae', br:'teacher', x:640, y:-280, t:'轻量 Auto-Encoder', s:'一次训练的特征瓶颈',
+ shapes:['Encoder: 2176 → 128','Decoder: 128 → 2176','MSE reconstruction'],
+ note:'Fig.2给出Encoder、Decoder与MSE LOSS；trained once不等于已确认frozen。',
+ detail:'用重建拼接特征训练一个共享瓶颈，把2176维特征压成128维latent。AE只训练一次，但论文没有给出detach、冻结或梯度阻断细节，因此不画frozen权重框。',
+ code:'PDF p4 Figure 2 / §3.1'},
+{id:'teacher_latent', br:'teacher', x:1020, y:-280, t:'128维教师特征图', s:'F_teacher',
+ shapes:['F_teacher: [H,W,128]'],
+ note:'作为可微特征渲染的监督目标，不直接复制给单个Gaussian。',
+ detail:'128维latent经Eq.(2)监督渲染特征图；Gaussian的z_i通过投影、遮挡与alpha-compositing在所有相关视角上优化，从而与2D教师空间对齐并绑定3D几何。',
+ code:'PDF p4 §3.1 Eq.(1)-(2)'},
+{id:'gs_encoder', br:'gs', x:300, y:80, t:'DepthSplat-based GS Encoder', s:'从标定多视角构建Gaussian场',
+ shapes:['2 RGB-D context views','intermediate depth'],
+ note:'Fig.2标GS Encoder；§3.1说明基于DepthSplat，未公开类名或层配置。',
+ detail:'GS Encoder把上下文观测转换为Gaussian场。L_dep同时约束rendered与intermediate depth，图中保留中间深度监督但补不猜测独立深度头。',
+ code:'PDF p4 Figure 2 / §3.1'},
+{id:'gaussians', br:'gs', x:640, y:80, t:'语义3D Gaussian primitives', s:'几何 + 128维语义',
+ shapes:['gᵢ = (μᵢ, Σᵢ, αᵢ, cᵢ, zᵢ)','zᵢ ∈ R¹²⁸','N₀ ≈ 10⁵'],
+ note:'z是token值；μ是3D中心元数据，不拼进128维z，也未确认进入decoder位置编码。',
+ detail:'每个Gaussian包含中心、协方差、不透明度、颜色和128维可学习语义特征。训练后取z_i作为GS token值，中心μ用于空间分组与加权更新。',
+ code:'PDF p4 §3.1 / p5 §3.2'},
+{id:'renderer', br:'gs', x:1020, y:80, t:'RGB / depth / feature renderer', s:'R(G, v)',
+ shapes:['Î_v, D̂_v, F̂_v','F̂_v: [H,W,128]'],
+ note:'特征与RGB/depth共享Gaussian投影、depth sorting、opacity和可见性。',
+ detail:'R_i(v,p)=T_i(v,p)α_i(v,p)，F̂_v(p)=Σ_i R_i(v,p)z_i。目标相机决定投影；该节点是可微渲染训练路径，不是独立的3D teacher。',
+ code:'PDF p4 §3.1 Eq.(1)'},
+{id:'render_loss', br:'loss', x:1450, y:80, t:'Stage I 两阶段渲染目标', s:'几何 → 几何＋语义',
+ shapes:['L₁ = λrgb·Lrgb + λdep·Ldep','L₂ = L₁ + λfeat·Lfeat'],
+ note:'第二阶段仍保留RGB-D目标；λ数值、optimizer和训练步数未给。',
+ detail:'先以RGB和depth稳定几何，再保留这些目标并加入渲染特征平方L2损失。Lfeat监督F̂与F_teacher；Ldep约束rendered和intermediate depth。内部两阶段不等于外层Stage II。',
+ code:'PDF p4 §3.1 / Eq.(2)'},
+{id:'note_boundary', br:'note', frozen:true, x:1870, y:80, t:'训练 / 推理边界', s:'虚线说明，不是模型模块',
+ note:'训练：RGB-D + 第三目标视角；在线：RGB + calibrated poses，无depth / 无第三novel target。未披露：K、动作维度、d_llm、LoRA配置、freeze状态、Morton量化、decoder位置编码、损失权重。',
+ detail:'这张卡片汇总论文明确写出的边界，只用于防止把训练监督或参考架构习惯误读到在线推理。它不是可学习模块，也不代表论文确认了任何冻结设置。',
+ code:'PDF p5 §3.1末段 / p6 §3.2 / p8 §5'},
+
+/* ---------- Stage II: 在线构建、MtQ与策略 ---------- */
+{id:'live_obs', br:'input', x:-340, y:520, t:'当前 RGB + 标定位姿', s:'在线推理观测',
+ shapes:['2 fixed RGB views','calibrated poses','no depth input'],
+ note:'每次控制用最新观测在线构建Gaussian，不依赖持久预建地图。',
+ detail:'§3.1明确在线只使用live RGB与标定相机位姿，不需要depth输入或第三novel target视图。§4.1说明方法使用两路固定相机；腕部图像另作为策略视觉token输入。',
+ code:'PDF p2 §1 / p5 §3.1 / p7 §4.1'},
+{id:'online_gs', br:'gs', x:300, y:520, t:'在线语义Gaussian前端', s:'使用Stage I学到的表征',
+ shapes:['N₀ ≈ 10⁵','z: [B,N₀,128]','μ: [B,N₀,3]'],
+ note:'不是永久场景地图；Stage II前端是否冻结、是否回传梯度未明确。',
+ detail:'每个控制步根据最新RGB和poses构建Gaussian场；流程图表示模块用途，不虚构AE、teacher或GS前端的冻结与梯度状态。',
+ code:'PDF p2 §1 / p5 §3.2'},
+{id:'pool', br:'mtq', x:640, y:520, t:'per-view grids + stride-4池化', s:'无参数粗压缩',
+ shapes:['≈10⁵ → ≈7K','同时池化 z 与 μ'],
+ note:'约7K是正文给出的粗缩减结果，kernel/padding与网格形状未披露。',
+ detail:'把密集GS tokens按视图reshape，并对语义特征和3D中心同时做stride-4 average pooling。不能把≈7K理解为固定100000/16。',
+ code:'PDF p5 §3.2 Parameter-free compression'},
+{id:'morton_merge', br:'mtq', x:1020, y:520, t:'Morton分组 + 语义合并', s:'重复至 N < 1000',
+ shapes:['Morton(μ) → A / B','cos(z_u,z_a)','top50% of B matches'],
+ note:'Morton只管空间排序；每个non-anchor在所有anchor中按语义余弦匹配。',
+ detail:'按中心的Morton code排序并交替分A/B；每个u∈B在全部A中找余弦相似度最高的anchor，只合并B最佳匹配分数前50%，按聚合size加权更新z、μ、s。停止条件是N<N′且N′=1000，不保证每轮恰好1000。',
+ code:'PDF p5 §3.2 Eq.(3)'},
+{id:'compressed', br:'mtq', x:1450, y:520, t:'压缩GS特征 Z′', s:'保留聚合语义',
+ shapes:['Z′: [B,N,128]','N < 1000'],
+ note:'μ用于merge；decoder公式只接收投影后的Z′作为K/V，没有确认3D位置编码边。',
+ detail:'正文用N′表示压缩特征形状，但实现描述为重复合并到数量小于1000。中心μ不进入本节点的decoder输入；不添加center→positional encoding→decoder的无依据连线。',
+ code:'PDF p5-p6 §3.2'},
+{id:'queries_decoder', br:'mtq', x:1020, y:720, t:'64 queries + 两层 decoder', s:'Query-based summarization',
+ shapes:['Q: [B,64,128]','Z′ → K / V','2-layer Transformer decoder'],
+ note:'语言不进入MtQ；GS摘要在后面的VLA因果序列中才获得语言条件。',
+ detail:'64个可学习query attend to压缩GS特征，两层decoder输出再投影到VLA隐藏维度。decoder heads、hidden size与位置编码未给。',
+ code:'PDF p6 §3.2 Query-based GS summarization'},
+{id:'summary', br:'mtq', x:1450, y:720, t:'GS context tokens', s:'X_gs',
+ shapes:['X_gs: [B,64,d_llm]'],
+ note:'64是summary token数；128是Gaussian特征宽度；d_llm数值未给。',
+ detail:'X_gs=Proj_llm(Dec_gs(Q,Z′))，作为固定长度、3D-grounded的上下文进入VLA。不能把0.5B参数量当隐藏维度。',
+ code:'PDF p6 §3.2 X_gs formula'},
+{id:'vla_inputs', br:'vlm', x:300, y:920, t:'视觉 / 语言 / 动作query', s:'VLA前缀与后缀tokens',
+ shapes:['X_vis (wrist image)','X_lang','X_act'],
+ note:'顺序为[X_vis, X_lang, X_gs, X_act]；X_gs排在语言之后。',
+ detail:'Fig.2图注给出instruction和wrist-image tokens。因果序列让动作query读取前面的视觉、语言与GS context；语言条件发生在VLA，不是MtQ decoder。',
+ code:'PDF p4 Figure 2 / p6 §3.2'},
+{id:'state', br:'input', x:640, y:1120, t:'本体感觉状态', s:'s',
+ shapes:['state dimension unspecified'],
+ note:'公式明确s进入动作头；不补成LLM state token或具体关节维度。',
+ detail:'动作头写成H(H_act,H_ctx,s)，但论文没有给状态维度、归一化或坐标参数化。',
+ code:'PDF p6 §3.2 Action generation'},
+{id:'vla', br:'vlm', x:1020, y:920, t:'VLA-Adapter-0.5B', s:'因果序列 / Fig.2标注LoRA',
+ shapes:['[X_vis,X_lang,X_gs,X_act]','H_act, H_ctx'],
+ note:'LoRA只在Fig.2出现；rank、target modules和完整可训练参数未披露。',
+ detail:'实验以VLA-Adapter-0.5B为骨干。GS context位于语言后、动作query前；动作query可读取所有先前上下文。图不代表完整梯度图。',
+ code:'PDF p4 Figure 2 / p6 §3.2 / p7 §4.1'},
+{id:'action_head', br:'action', x:1450, y:920, t:'连续动作头 H', s:'â₁:K = H(H_act,H_ctx,s)',
+ shapes:['â₁:K','K unspecified'],
+ note:'不是diffusion / flow matching / 离散action分类；K与单动作维度未给。',
+ detail:'动作头融合动作hidden、上下文hidden和本体状态s，预测K个连续动作。真实机器人段仅执行前4步后重规划，不能把4写成动作维度。',
+ code:'PDF p6 §3.2 Action generation'},
+{id:'action_loss', br:'loss', x:1870, y:1120, t:'策略动作回归损失', s:'L1 + 示范动作监督',
+ shapes:['L_act = Σ_t ‖â_t − a_t‖₁','a₁:K'],
+ note:'论文未说明Stage I渲染损失与动作L1加权求和，不构造统一L_total。',
+ detail:'策略训练使用连续动作L1回归，示范动作来自相同task-specific demonstrations。在线推理不读取真实未来动作。',
+ code:'PDF p6 §3.2 / p7 §4.1'},
+{id:'execute_replan', br:'action', x:1450, y:1320, t:'执行前4步 / 重新观测', s:'实机闭环',
+ shapes:['K_exec = 4','predicted K unspecified'],
+ note:'执行后用新RGB、poses与状态重新规划；不是一次输出4维动作。',
+ detail:'真实机器人只执行预测序列前4个动作以限制开环误差，随后重新获取观测并重建Gaussian。不能默认LIBERO评测也使用完全相同设置。',
+ code:'PDF p6 §3.2 During real-robot inference'},
+];
+
+const EDGES = [
+  ['train_rgbd','foundation','训练帧特征'],
+  ['foundation','ae','concat 2176'],
+  ['ae','teacher_latent','128D latent'],
+  ['train_rgbd','gs_encoder','2 RGB-D context'],
+  ['gs_encoder','gaussians','Gaussian场'],
+  ['gaussians','renderer','G / z'],
+  ['gs_encoder','render_loss','中间深度'],
+  ['renderer','render_loss','Î, D̂, F̂'],
+  ['train_rgbd','render_loss','RGB-D目标',true],
+  ['teacher_latent','render_loss','F_teacher目标',true],
+  ['gaussians','online_gs','学习后的GS前端',true],
+  ['live_obs','online_gs','RGB + poses'],
+  ['online_gs','pool','N₀ ≈ 10⁵'],
+  ['pool','morton_merge','≈7K'],
+  ['morton_merge','compressed','N < 1000'],
+  ['compressed','queries_decoder','K / V'],
+  ['queries_decoder','summary','64条摘要'],
+  ['summary','vla','X_gs'],
+  ['vla_inputs','vla','X_vis / X_lang / X_act'],
+  ['vla','action_head','H_act / H_ctx'],
+  ['state','action_head','s'],
+  ['action_head','action_loss','â₁:K'],
+  ['train_rgbd','action_loss','示范动作 a₁:K',true],
+  ['action_head','execute_replan','预测K步'],
+  ['execute_replan','live_obs','新观测 / 重规划',true],
+  ['note_boundary','train_rgbd','训练边界',true],
+  ['note_boundary','live_obs','推理边界',true],
+];
+
+/* ===================== 渲染 ===================== */
+const stage = document.getElementById('stage');
+const world = document.getElementById('world');
+const nlayer = document.getElementById('nlayer');
+const llayer = document.getElementById('llayer');
+const elayer = document.getElementById('elayer');
+const svg = document.getElementById('edges');
+const panel = document.getElementById('panel');
+const panelBody = document.getElementById('panel-body');
+const zoomtag = document.getElementById('zoomtag');
+
+const nodeById = {};
+const edgeEls = [];
+let selected = null;
+const LS_KEY = 'vistavla-flow-v1';
+
+/* 图例 */
+(function(){
+  const lg = document.getElementById('legend');
+  Object.entries(BR).forEach(([k,v])=>{
+    if(k==='note') return;
+    const d = document.createElement('span');
+    d.className = 'chip';
+    d.innerHTML = `<i style="background:${v.c}"></i>${v.n}`;
+    lg.appendChild(d);
+  });
+  const extra = document.createElement('span');
+  extra.className = 'chip';
+  extra.innerHTML = `<i style="background:#fff;border:1.5px dashed #8a8880"></i>虚线框 = 边界说明(非数据流)`;
+  lg.appendChild(extra);
+})();
+
+function shapeClass(n){ return SHAPE_CLASS[n.br] || 'i'; }
+
+function buildNodes(){
+  NODES.forEach(n=>{
+    n.w = 232;
+    const el = document.createElement('div');
+    el.className = 'node' + (n.frozen ? ' frozen' : '') + (n.br==='note' ? ' note' : '');
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+    el.dataset.id = n.id;
+    const br = BR[n.br];
+    const shapes = (n.shapes||[]).map(s=>`<span class="shape ${shapeClass(n)}">${s}</span>`).join('');
+    el.innerHTML =
+      `<div class="nhead"><i style="background:${br.c}"></i><span class="ntitle">${n.t}</span></div>` +
+      (n.s ? `<div class="nsub">${n.s}</div>` : '') +
+      (shapes ? `<div class="shapes">${shapes}</div>` : '') +
+      (n.note ? `<div class="note-txt">${n.note}</div>` : '');
+    nlayer.appendChild(el);
+    n.el = el;
+    nodeById[n.id] = n;
+    el.addEventListener('pointerdown', e=>onNodeDown(e, n));
+    el.addEventListener('pointerenter', ()=>highlight(n.id, true));
+    el.addEventListener('pointerleave', ()=>highlight(n.id, false));
+  });
+  NODES.forEach(n=>{ n.h = n.el.offsetHeight; });
+}
+
+function anchor(n, side){
+  if(side==='r') return {x:n.x+n.w, y:n.y+n.h/2};
+  if(side==='l') return {x:n.x,     y:n.y+n.h/2};
+  if(side==='t') return {x:n.x+n.w/2, y:n.y};
+  return {x:n.x+n.w/2, y:n.y+n.h};
+}
+function pickSides(a,b){
+  const ac = {x:a.x+a.w/2, y:a.y+a.h/2}, bc = {x:b.x+b.w/2, y:b.y+b.h/2};
+  const dx = bc.x-ac.x, dy = bc.y-ac.y;
+  if(Math.abs(dx) >= Math.abs(dy)) return dx>0 ? ['r','l'] : ['l','r'];
+  return dy>0 ? ['b','t'] : ['t','b'];
+}
+function pathD(p1,p2,horiz){
+  if(horiz){
+    const k = Math.max(40, Math.min(150, Math.abs(p2.x-p1.x)*0.5));
+    return `M ${p1.x} ${p1.y} C ${p1.x+k} ${p1.y}, ${p2.x-k} ${p2.y}, ${p2.x} ${p2.y}`;
+  }
+  const k = Math.max(30, Math.min(110, Math.abs(p2.y-p1.y)*0.5));
+  return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y+k}, ${p2.x} ${p2.y-k}, ${p2.x} ${p2.y}`;
+}
+function bezMid(p1,p2,horiz){
+  let c1,c2;
+  if(horiz){
+    const k = Math.max(40, Math.min(150, Math.abs(p2.x-p1.x)*0.5));
+    c1 = {x:p1.x+k, y:p1.y}; c2 = {x:p2.x-k, y:p2.y};
+  }else{
+    const k = Math.max(30, Math.min(110, Math.abs(p2.y-p1.y)*0.5));
+    c1 = {x:p1.x, y:p1.y+k}; c2 = {x:p2.x, y:p2.y-k};
+  }
+  return {x:(p1.x+3*c1.x+3*c2.x+p2.x)/8, y:(p1.y+3*c1.y+3*c2.y+p2.y)/8};
+}
+
+/* 指定连边的出入侧:让长边走列间空白通道,避免横穿其它节点卡片 */
+const SIDE_OVERRIDE = {
+  'summary>vla': 'rl',
+  'vla_inputs>vla': 'rl',
+  'state>action_head': 'rl',
+};
+function sidesFor(a,b){
+  const ov = SIDE_OVERRIDE[a.id+'>'+b.id];
+  if(ov) return [ov[0], ov[1]];
+  return pickSides(a,b);
+}
+
+function buildEdges(){
+  svg.setAttribute('width', 2600);
+  svg.setAttribute('height', 1300);
+  EDGES.forEach(([from,to,label,dashed])=>{
+    const a = nodeById[from], b = nodeById[to];
+    const casing = document.createElementNS('http://www.w3.org/2000/svg','path');
+    casing.setAttribute('class','casing');
+    elayer.appendChild(casing);
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('class','edge' + (dashed?' dashed':''));
+    p.setAttribute('marker-end','url(#arw)');
+    elayer.appendChild(p);
+    const lb = document.createElement('div');
+    lb.className = 'elabel';
+    lb.textContent = label;
+    if(!label) lb.style.display = 'none';
+    llayer.appendChild(lb);
+    edgeEls.push({a,b,p,casing,lb});
+  });
+  redrawEdges();
+}
+function redrawEdges(){
+  edgeEls.forEach(e=>{
+    const [sa,sb] = sidesFor(e.a,e.b);
+    const p1 = anchor(e.a,sa), p2 = anchor(e.b,sb);
+    const horiz = (sa==='r'||sa==='l');
+    const d = pathD(p1,p2,horiz);
+    e.p.setAttribute('d', d);
+    e.casing.setAttribute('d', d);
+    const m = bezMid(p1,p2,horiz);
+    if(horiz){ e.lb.style.left = m.x+'px'; e.lb.style.top = (m.y-16)+'px'; }
+    else     { e.lb.style.left = (m.x-18)+'px'; e.lb.style.top = m.y+'px'; }
+  });
+}
+function redrawNode(n){
+  n.el.style.left = n.x+'px';
+  n.el.style.top  = n.y+'px';
+  redrawEdges();
+}
+
+/* ===================== 交互 ===================== */
+/* 默认视野: 取自 2026-10-16 从浏览器本地存储恢复出的实际画面 */
+const DEFAULT_VIEW = {x:-106.8175, y:335.2842, k:0.6857};
+let view = {x:0, y:0, k:1};
+function applyView(){
+  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+  zoomtag.textContent = Math.round(view.k*100)+'%';
+  saveState();
+}
+function clampK(k){ return Math.max(0.2, Math.min(2.4, k)); }
+
+function onNodeDown(e, n){
+  if(e.button!==0) return;
+  e.stopPropagation();
+  n.el.setPointerCapture(e.pointerId);
+  const sx = e.clientX, sy = e.clientY, ox = n.x, oy = n.y;
+  let moved = 0;
+  n.el.classList.add('dragging');
+  const mv = ev=>{
+    const dx = (ev.clientX-sx)/view.k, dy = (ev.clientY-sy)/view.k;
+    moved = Math.max(moved, Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy));
+    n.x = ox+dx; n.y = oy+dy;
+    redrawNode(n);
+  };
+  const up = ()=>{
+    n.el.classList.remove('dragging');
+    n.el.releasePointerCapture(e.pointerId);
+    n.el.removeEventListener('pointermove', mv);
+    n.el.removeEventListener('pointerup', up);
+    if(moved < 5) selectNode(n);
+    saveState();
+  };
+  n.el.addEventListener('pointermove', mv);
+  n.el.addEventListener('pointerup', up);
+}
+
+stage.addEventListener('pointerdown', e=>{
+  if(e.target.closest('.node')) return;
+  closePanel();
+  stage.classList.add('panning');
+  const sx = e.clientX, sy = e.clientY, ox = view.x, oy = view.y;
+  const mv = ev=>{ view.x = ox + (ev.clientX-sx); view.y = oy + (ev.clientY-sy); applyView(); };
+  const up = ()=>{
+    stage.classList.remove('panning');
+    window.removeEventListener('pointermove', mv);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', mv);
+  window.addEventListener('pointerup', up);
+});
+
+stage.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const k2 = clampK(view.k * (e.deltaY<0 ? 1.12 : 0.89));
+  view.x = mx - (mx - view.x) * k2/view.k;
+  view.y = my - (my - view.y) * k2/view.k;
+  view.k = k2;
+  applyView();
+}, {passive:false});
+
+function highlight(id, on){
+  edgeEls.forEach(e=>{
+    const touch = (e.a.id===id || e.b.id===id);
+    if(on){
+      if(touch){ e.p.classList.add('hl'); e.p.classList.remove('dim'); e.p.setAttribute('marker-end','url(#arw-hl)'); }
+      else e.p.classList.add('dim');
+      if(touch && e.lb.textContent) e.lb.style.opacity = 1;
+    }else{
+      e.p.classList.remove('hl','dim');
+      e.p.setAttribute('marker-end','url(#arw)');
+      e.lb.style.opacity = '';
+    }
+  });
+  NODES.forEach(n=>{
+    if(!on) { n.el.classList.remove('dim'); return; }
+    const touch = edgeEls.some(e=>(e.a.id===id||e.b.id===id) && (e.a.id===n.id||e.b.id===n.id));
+    n.el.classList.toggle('dim', !touch && n.id!==id);
+  });
+}
+
+function selectNode(n){
+  NODES.forEach(m=>m.el.classList.remove('selected'));
+  n.el.classList.add('selected');
+  selected = n;
+  const br = BR[n.br];
+  const ins = [], outs = [];
+  EDGES.forEach(([f,t,l])=>{ if(t===n.id) ins.push(nodeById[f].t); if(f===n.id) outs.push(nodeById[t].t); });
+  panelBody.innerHTML =
+    `<h2>${n.t}</h2>` +
+    (n.s?`<div class="psub">${n.s}</div>`:'') +
+    `<span class="ptag" style="background:${br.bg};color:${br.c}">${br.n}${n.br==='note'?' · 虚线说明':(n.frozen?' · frozen':'')}</span>` +
+    (n.shapes?`<h3>张量形状</h3><div class="pshapes">${n.shapes.map(s=>`<span class="shape ${shapeClass(n)}">${s}</span>`).join('')}</div>`:'') +
+    (n.detail?`<h3>说明</h3><div class="pbody">${n.detail}</div>`:'') +
+    (n.note?`<h3>要点</h3><div class="pbody">${n.note}</div>`:'') +
+    (ins.length?`<h3>输入来自</h3><div class="pconn">${ins.map(x=>`<b>·</b> ${x}`).join('<br>')}</div>`:'') +
+    (outs.length?`<h3>输出到</h3><div class="pconn">${outs.map(x=>`<b>·</b> ${x}`).join('<br>')}</div>`:'') +
+    (n.code?`<h3>论文依据</h3><div class="pcode">${n.code}</div>`:'');
+  panel.classList.add('open');
+}
+function closePanel(){ panel.classList.remove('open'); NODES.forEach(m=>m.el.classList.remove('selected')); selected=null; }
+document.getElementById('panel-close').addEventListener('click', closePanel);
+
+/* 工具按钮 */
+function fit(){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  NODES.forEach(n=>{ x0=Math.min(x0,n.x); y0=Math.min(y0,n.y); x1=Math.max(x1,n.x+n.w); y1=Math.max(y1,n.y+n.h); });
+  const pad = 48;
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  const k = clampK(Math.min((sw-pad*2)/(x1-x0), (sh-pad*2)/(y1-y0)));
+  view.k = k;
+  view.x = (sw - (x1-x0)*k)/2 - x0*k;
+  view.y = (sh - (y1-y0)*k)/2 - y0*k;
+  applyView();
+}
+document.getElementById('btn-fit').addEventListener('click', fit);
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  localStorage.removeItem(LS_KEY);
+  NODES.forEach(n=>{ n.x=n.px; n.y=n.py; });
+  NODES.forEach(n=>{ n.x=n.px; n.y=n.py; redrawNode(n); });
+  fit();
+});
+let showLabels = true;
+const btnLabels = document.getElementById('btn-labels');
+btnLabels.addEventListener('click', ()=>{
+  showLabels = !showLabels;
+  btnLabels.classList.toggle('on', showLabels);
+  btnLabels.textContent = showLabels ? '边标签: 开' : '边标签: 关';
+  edgeEls.forEach(ed=>{ ed.lb.classList.toggle('hide', !showLabels); });
+});
+document.getElementById('btn-help').addEventListener('click', ()=>{
+  panelBody.innerHTML =
+    `<h2>使用说明</h2>
+     <div class="pbody" style="line-height:2">
+     <b>拖动节点</b>:按住节点拖动,自动重排连线。<br>
+     <b>平移画布</b>:在空白处按住拖动。<br>
+     <b>缩放</b>:滚轮(以鼠标位置为中心)。<br>
+     <b>查看详情</b>:单击任意节点,右侧显示张量形状、输入输出连接与PDF依据。<br>
+     <b>高亮链路</b>:鼠标悬停节点,相关连边加粗、其余淡出。<br>
+     <b>重置布局</b>:恢复初始排版并清除本地记录。<br><br>
+     <b>导出布局</b>:把当前节点坐标+视野下载成 <code>vistavla-flow-layout.json</code>。<br>
+     <b>导入布局</b>:选择之前导出的 JSON,一键还原(换端口、换电脑、换浏览器都有效)。<br><br>
+     <b>实线</b> = 数据流;<b>虚线</b> = 监督 / 参数 / 边界说明。<br>
+     <b>虚线框</b> = 边界说明(非数据流),不是已确认frozen权重。<br><br>
+     <b>持久化说明</b>:拖动结果写在浏览器 localStorage(键 <code>vistavla-flow-v1</code>),但发布版启动时固定采用作者布局;<br>
+     想跨端口或跨电脑恢复,就用<b>导出布局</b>存一份 JSON。<br>
+     <b>依据边界</b>:内容按本地PDF与Figure 2绘制;未检出可确认的官方代码,详情列PDF页码而非源码行号。
+     </div>`;
+  panel.classList.add('open');
+});
+
+/* 导出 / 导入布局: 不依赖浏览器本地记录, 换端口/换电脑也能恢复 */
+function exportLayout(){
+  const pos = {};
+  NODES.forEach(n=>{ pos[n.id] = [Math.round(n.x), Math.round(n.y)]; });
+  const data = { key: LS_KEY, savedAt: new Date().toISOString(), pos, view };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'vistavla-flow-layout.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function applyLayout(st){
+  if(st.pos) NODES.forEach(n=>{ if(st.pos[n.id]){ n.px = n.x; n.py = n.y; n.x = st.pos[n.id][0]; n.y = st.pos[n.id][1]; } });
+  if(st.view) view = st.view;
+  NODES.forEach(redrawNode);
+  applyView();
+  saveState();
+}
+function importLayout(file){
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    try{
+      const st = JSON.parse(fr.result);
+      if(!st.pos) throw new Error('缺少 pos 字段');
+      applyLayout(st);
+      alert('布局已导入并保存到本地浏览器。');
+    }catch(err){ alert('导入失败:' + err.message); }
+  };
+  fr.readAsText(file);
+}
+document.getElementById('btn-export').addEventListener('click', exportLayout);
+const importInput = document.getElementById('import-file');
+document.getElementById('btn-import').addEventListener('click', ()=> importInput.click());
+importInput.addEventListener('change', ()=>{ if(importInput.files[0]) importLayout(importInput.files[0]); importInput.value=''; });
+
+/* 持久化 */
+function saveState(){
+  try{
+    const pos = {};
+    NODES.forEach(n=>{ pos[n.id] = [Math.round(n.x), Math.round(n.y)]; });
+    localStorage.setItem(LS_KEY, JSON.stringify({pos, view}));
+  }catch(e){}
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    const st = JSON.parse(raw);
+    if(st.pos) NODES.forEach(n=>{ if(st.pos[n.id]){ n.px = n.x; n.py = n.y; n.x = st.pos[n.id][0]; n.y = st.pos[n.id][1]; } });
+    if(st.view) view = st.view;
+    return true;
+  }catch(e){ return false; }
+}
+
+/* 启动 */
+NODES.forEach(n=>{ n.px = n.x; n.py = n.y; });
+buildNodes();
+buildEdges();
+const restored = false; /* 发布版：固定展示作者布局 */
+NODES.forEach(redrawNode);
+if(!restored) view = Object.assign({}, DEFAULT_VIEW);
+applyView();
+window.addEventListener('resize', ()=>{ /* 保持视图,仅防溢出 */ });
+window.VistaVLAData={NODES,EDGES,BR,DEFAULT_VIEW};
+</script>
+</body>
+</html>

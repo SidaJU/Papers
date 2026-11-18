@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-11-18",
+  "artifact": "arch_reference_source.html",
+  "paper": "GeoPredict: Leveraging Predictive Kinematics and 3D Gaussian Geometry for Precise VLA Manipulation",
+  "verification_level": "论文及固定源码静态对照、独立复核、实际浏览器交互验证；不是GPU训练或推理复现，不作无法证实的绝对无误保证。",
+  "inputs": {
+    "primary_paper": {"file": "GeoPredict.pdf", "edition": "CVPR 2026 official open-access", "pages_read": 11},
+    "supplement": {"file": "GeoPredict_supplemental.pdf", "pages_read": 4},
+    "official_code": {
+      "directory": "code",
+      "repository": "https://github.com/jingjingqian75/GeoPredict",
+      "commit": "5191756e8c4f16de2b63c28636341f2d4f5cdf2e"
+    },
+    "visual_reference": "C:/Users/theozhu/WorkBuddy/2026-10-20-10-26-01/arch_reference_source.html",
+    "reference_usage": "参考卡片画布、拖拽缩放、详情与布局管理；GeoPredict科学内容重新依据原文和源码整理，未沿用LingBot-VLA内容。"
+  },
+  "views": {
+    "paper": {"label": "论文训练", "nodes": 23, "edges": 28, "basis": "正文Fig.1–2、Eq.1–12与§4.1；未明确的整数网格保持符号化"},
+    "code": {"label": "开源实现", "nodes": 29, "edges": 35, "basis": "5191756中RoboCasa数据到compute_loss的实际路径"},
+    "inference": {"label": "推理路径", "nodes": 11, "edges": 9, "basis": "sample_actions、RobocasaInput/OutputTransform及test_robocasa"}
+  },
+  "key_verified_facts": [
+    {
+      "fact": "推理保留历史轨迹编码与未来/空间query tokens；不调用显式XYZ、VoxelDecoder、refine MLP或renderer。模型构造与checkpoint仍含这些模块。",
+      "evidence": ["GeoPredict.pdf: PDF page 5, §3.4", "code/models/geopredict.py:114-139,504-542", "code/tools/test_robocasa.py:365-368"]
+    },
+    {
+      "fact": "代码prefix位置数1152 = 3×256图像 +48文本 +8历史 +8未来轨迹 +320空间；suffix为1个state加50个action，共51位置。完整训练序列1203位置。",
+      "evidence": ["code/models/siglip.py:43-99", "code/models/tokenizer.py:5-24", "code/models/geopredict.py:114-223"]
+    },
+    {
+      "fact": "五个块依次为2D、历史、3D queries、State、Action，块内双向、块间只读本块及前块；另叠加token有效性mask。",
+      "evidence": ["GeoPredict.pdf: PDF page 5, Fig.2", "code/models/geopredict.py:21-28,141-223"]
+    },
+    {
+      "fact": "代码8×8×5粗空间网格经解码及插值到40×40×25，每体素4个初始高斯共160000；加密增加每个选中体素64个高斯。",
+      "evidence": ["code/models/head.py:5-49", "code/models/geopredict.py:123-139,314-380"]
+    },
+    {
+      "fact": "当前帧与50个未来时间槽全部处理；未来标签超过episode尾部会重复末帧。动作标签为t到t+49，未来几何标签为t+1到t+50。",
+      "evidence": ["code/data_processing/robocasa_dataset.py:72-116", "code/models/geopredict.py:290-312,415-499"]
+    },
+    {
+      "fact": "公开模型默认10步Euler积分，生成50×32动作；反归一化截取12维，评测默认执行5步后重新规划。",
+      "evidence": ["code/models/geopredict.py:504-542", "code/data_processing/data_transform.py:83-103", "code/tools/test_robocasa.py:282-304,337-350"]
+    },
+    {
+      "fact": "当前/未来轨迹共用Linear：p_now=W*h+b0，p_future=W*(h+PE[Delta-1])+b0。固定权重、相同有效Delta时，忽略浮点舍入，相对位移为W*PE[Delta-1]，不依赖样本或关键点；绝对位置仍依赖h。",
+      "evidence": ["code/models/geopredict.py:114-120,290-310"],
+      "boundary": "这只是当前发布轨迹头的结构性质，不是已实测性能结论，不能推广到非线性VoxelDecoder、动作专家或论文所有实验。"
+    },
+    {
+      "fact": "训练历史使用keypoints[:t]，排除当前；评测每次env.step后写入关键点，所以下次重规划历史含最新当前姿态。首个规划输入为一帧全零历史。",
+      "evidence": ["code/data_processing/robocasa_dataset.py:79-90", "code/tools/test_robocasa.py:232-242,257-279,299-304"],
+      "boundary": "静态时间边界差异已确认，是否产生有害分布偏移未经实验。"
+    },
+    {
+      "fact": "几何query前缀不能读取suffix中的当前state、动作噪声或flow time；动作专家读取的是query隐状态K/V，并非显式XYZ、Gaussian或depth输出。",
+      "evidence": ["code/models/geopredict.py:21-28,141-223", "code/models/gemma.py:88-191"],
+      "boundary": "不排除图像和历史轨迹间接包含当前姿态；注意力方向也不等于停止反向梯度。"
+    }
+  ],
+  "differences_explicitly_labeled": [
+    "论文每轴4倍降采样的z粗分辨率不是整数，未擅自补造取整规则；代码明确为8×8×5并额外插值。",
+    "论文体素特征宽度C′=256，源码最终保存特征为128；以实际层定义而非过时注释为准。",
+    "论文轨迹嵌入以MLP概括；代码为时间Conv1d patch4、共享cross-attention等。未来XYZ输出头实际是Linear。",
+    "论文深度损失为masked L1，代码为masked Smooth L1，分当前/未来及左右相机四项。",
+    "论文轨迹损失统一在H+1时刻归一化，代码current MSE与future MSE分别平均后相加。",
+    "论文省略颜色参数；代码每个高斯14通道含RGB并返回RGB图，但训练未使用RGB或SSIM损失。",
+    "论文按命中体素加密；代码扩张3×3×3邻域。整数选择没有沿索引返回到坐标头的梯度。",
+    "论文一般动作定义7维；RoboCasa实际状态8维、动作12维，模型均padding到32维。",
+    "论文未明确mask反投影使用哪种深度；源码明确用GT depth。论文视图保留此证据边界。",
+    "不执行辅助头不等于自动删除其权重、显存或Python/CUDA依赖；本页不宣称完成模型裁剪。",
+    "公开共享线性轨迹头使相同有效未来偏移的位移W*PE对样本/关节共享；绝对位置仍有样本依赖。",
+    "训练历史排除当前帧，评测历史含动作执行后最新姿态；时间边界不同，未做影响评测。",
+    "撤回对预制npy单位已核验的暗示：模型要求相同尺度/坐标约定，实际数据及生成流程仍未验证。",
+    "先zero-pad再mean/std归一化，不保证padding最终为零；12维动作的每个分量语义未补造。",
+    "评测图像[::-1]为上下翻转，不是注释所称180度旋转；默认horizon/dim来自实际构造而非未传入的CLI参数。"
+  ],
+  "review_passes": [
+    {"scope": "主审：正文、附录、训练/推理核心源码逐段对照", "result": "完成，并将论文与实现拆成独立视图"},
+    {"scope": "独立论文视图静态复核", "finding": "正文未明确GT depth生成mask，初稿说明过于确定", "resolution": "论文图改为不指定深度来源；代码图另据实现标明GT"},
+    {"scope": "独立开源/推理视图静态抽查", "finding": "cams.npy索引1/3不应写成自然序数第1/3项", "resolution": "已改为零基索引1/3"},
+    {"scope": "补充报告返回后的定点复核", "finding": "共享线性头的位移约束、历史训练/推理时间边界和原始数据单位尚未充分说明", "resolution": "已重读对应源码，更新节点与新增3项提示；线性恒等式以代数及精确有理数检查，未运行模型"}
+  ],
+  "checks": {
+    "javascript_syntax_node_check": "passed",
+    "ide_errors_and_warnings": 0,
+    "graph_nodes_unique_and_edges_resolve": "passed: 63 nodes, 72 edges",
+    "source_code_citation_ranges": "passed: 133 citations in graph/audit metadata across 15 existing code files",
+    "all_63_node_details_opened_in_browser": "passed again after supplemental revision",
+    "three_view_switching": "passed",
+    "node_pointer_drag_and_reset": "passed",
+    "keyboard_node_move": "passed",
+    "canvas_pan_and_wheel_zoom": "passed",
+    "related_edge_highlight": "passed",
+    "cross_view_search": "passed",
+    "edge_label_toggle": "passed",
+    "layout_download_import_roundtrip": "passed",
+    "layout_reload_persistence": "passed",
+    "invalid_layout_and_invalid_zoom_rejection": "passed",
+    "five_block_attention_matrix": "passed: 15 allowed cells in each full five-block matrix",
+    "all_15_audit_items_rendered": "passed",
+    "additive_linear_head_identity": "静态共享Linear与PE路径复核；精确有理数验证W(h+e)+b-(Wh+b)=We，无模型权重或性能评测",
+    "supplemental_revision_layout": "三视图在1536x960与390x844均无卡片重叠或页面水平溢出；新说明逐节点实测可见",
+    "desktop_1536x960": "passed for all three views: no node overlaps, visible labels do not cover cards, no page overflow",
+    "mobile_390x844": "passed for all three views: no node overlaps, visible labels do not cover cards, no page overflow; usable canvas height451",
+    "local_primary_pdf_supplement_and_author_figure_links": "HTTP200",
+    "page_script_errors_during_final_interaction_suite": 0,
+    "existing_input_files_unchanged": "passed: SHA256 matched all 35 original paper/code/source-record files",
+    "static_constants_from_python_ast": "passed: action_dim32, action_horizon50, text48, spatial grid8x8x5x2048"
+  },
+  "validation_environment": {
+    "browser": "Microsoft Edge via Playwright CLI 0.1.24",
+    "transport": "localhost HTTP on loopback only",
+    "file_protocol_browser_test": "未执行：浏览器自动化策略阻止file协议；未绕过限制。HTML没有外部脚本或字体依赖。",
+    "model_execution": false,
+    "weights_loaded": false,
+    "training_environment_installed": false,
+    "external_cuda_rasterizer_fully_audited": false
+  },
+  "limitations": [
+    "静态解释和浏览器测试不能代替GPU训练、推理、数据或机器人实验验证。",
+    "未下载的外部CUDA依赖未进行全实现审计；渲染数学的论文声明与Python调用层分开对照。",
+    "本文记录不代表原论文所有基准均已完整开源或可由该RoboCasa快照复现。",
+    "所画边表示数据、参数或监督关系，不是所有路径均可微的保证。",
+    "未读取预制depth/keypoints/camera数据及外部norm_stats，不保证其实际单位/坐标约定或归一化padding值；模型所需约定与数据核验分开描述。",
+    "线性轨迹头约束仅对固定快照、固定权重、相同有效相对帧偏移成立；不代表全部模型输出与样本无关，也不替代误差测量。",
+    "训练/推理历史末帧时间差异未做消融或性能评测。",
+    "宽视图默认缩小以容纳完整架构；可滚轮放大、搜索并点击节点查看详细说明。"
+  ],
+  "original_code_modified": false,
+  "git_commit_or_push_performed": false,
+  "cleaned_intermediate_work": ".architecture-work/（截图、PDF抽取文本、布局JSON、浏览器测试脚本、服务器日志与.playwright-cli缓存）已删除；最终HTML、论文/附录、源码快照与核验记录保留。"
+}

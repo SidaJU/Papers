@@ -1,0 +1,19 @@
+{
+  "checked_on": "2026-11-18",
+  "paper": "VistaVLA: Geometry- and Semantic-Aware 3D Gaussian-Grounded VLA for Robotic Manipulation",
+  "arxiv": "https://arxiv.org/abs/2607.12356v2",
+  "local_pdf": "VistaVLA.pdf",
+  "official_implementation": null,
+  "clone_performed": false,
+  "conclusion": "未检出可确认的公开官方实现；这不证明作者没有代码或未来不会公开。架构依据本地PDF，而非其他VISTA项目代码。",
+  "checks": [
+    {"source": "本地PDF正文与URI annotations", "result": "15页，方法正文p3–6；未给VistaVLA项目或GitHub实现链接"},
+    {"source": "https://arxiv.org/html/2607.12356v2", "result": "标题与本地PDF一致；未确认官方实现链接"},
+    {"source": "GitHub repository search: VistaVLA", "result": "无结果"},
+    {"source": "GitHub repository search: VistaVLA in:name,description,readme", "result": "仅检出论文列表/摘要汇编，未检出实现"},
+    {"source": "GitHub code search: VistaVLA and 2607.12356", "result": "主要检出第三方论文摘要/题录，没有可确认的模型实现"},
+    {"source": "https://vista-vla.github.io/", "result": "排除：对应VISTA: Enhancing Visual Conditioning via Track-Following Preference Optimization，arXiv:2602.05049，作者不同，不是本篇"},
+    {"source": "Web exact-title/author searches", "result": "检出arXiv及第三方解读，未检出可信官方代码链接"}
+  ],
+  "not_downloaded": "没有把DepthSplat、VLA-Adapter或其他同名VISTA仓库冒充VistaVLA完整代码，也未运行第三方脚本。"
+}

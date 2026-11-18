@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scene-Scale Aerial Manipulation VLA · 架构流程图（交互版）</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --panel:#ffffff; --line:#d9d7d0; --line-soft:#e8e6e0;
+    --text:#26251f; --text-2:#6b6a63; --text-3:#9a988e;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px}
+
+  header{height:52px;display:flex;align-items:center;gap:14px;padding:0 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);position:relative;z-index:20}
+  header h1{font-size:14px;font-weight:600;letter-spacing:.2px;white-space:nowrap}
+  header h1 span{color:var(--text-3);font-weight:400;margin-left:8px;font-size:12px}
+  .tools{display:flex;gap:6px;margin-left:auto;align-items:center}
+  button{font-family:var(--sans);font-size:12px;color:var(--text);background:#fff;
+    border:1px solid var(--line);border-radius:7px;padding:5px 11px;cursor:pointer;line-height:1.4}
+  button:hover{border-color:#b9b7ae;background:#faf9f6}
+  button.on{background:#26251f;color:#fff;border-color:#26251f}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;padding:6px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line-soft);position:relative;z-index:19}
+  .chip{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2);white-space:nowrap}
+  .chip i{width:9px;height:9px;border-radius:2px;display:block;flex:none}
+  .hint{font-size:11px;color:var(--text-3);padding:0 16px 6px;background:var(--panel)}
+
+  #stage{position:absolute;inset:52px 0 0 0;overflow:hidden;cursor:grab;touch-action:none}
+  #stage.panning{cursor:grabbing}
+  #world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+  #edges{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+  .casing{fill:none;stroke:#f6f5f2;stroke-width:5;stroke-linecap:round;opacity:1}
+  .edge{fill:none;stroke:#a9a7a0;stroke-width:1.6;opacity:.62}
+  .edge.dashed{stroke-dasharray:5 4}
+  .edge.hl{stroke:#26251f;stroke-width:2.6;opacity:1}
+  .edge.dim{opacity:.1}
+  .elabel{position:absolute;font-size:10.5px;color:var(--text-2);background:rgba(255,255,255,.92);
+    border:1px solid var(--line-soft);border-radius:5px;padding:1px 6px;white-space:nowrap;
+    transform:translate(-50%,-50%);pointer-events:none;font-family:var(--mono)}
+  .elabel.hide{display:none}
+
+  .node{position:absolute;width:236px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:9px 11px 10px;cursor:grab;user-select:none;
+    box-shadow:0 1px 2px rgba(38,37,31,.05);transition:box-shadow .12s,border-color .12s}
+  .node:hover{border-color:#b3b1a8;box-shadow:0 2px 8px rgba(38,37,31,.09)}
+  .node.dragging{cursor:grabbing;box-shadow:0 6px 18px rgba(38,37,31,.16);z-index:50}
+  .node.selected{border-color:#26251f;border-width:1.5px}
+  .node.dim{opacity:.35}
+  .node.frozen{border-style:dashed;border-width:1.5px}
+  .node.note{cursor:default;background:#fffdf5}
+  .nhead{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+  .nhead i{width:8px;height:8px;border-radius:2.5px;flex:none}
+  .ntitle{font-size:12.5px;font-weight:600;line-height:1.3}
+  .nsub{font-size:11px;color:var(--text-2);margin-bottom:5px;line-height:1.35}
+  .shapes{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 2px}
+  .shape{font-family:var(--mono);font-size:10.5px;background:#f1efe9;border:1px solid var(--line-soft);
+    border-radius:5px;padding:1.5px 6px;color:#4a4840;white-space:nowrap}
+  .shape.k{background:#eef2f7;border-color:#d5e0ec;color:#2c4a6b}
+  .shape.v{background:#eaf4ef;border-color:#cfe6da;color:#255a45}
+  .shape.d{background:#fbf1e2;border-color:#eed9b8;color:#7a5414}
+  .shape.l{background:#fdecec;border-color:#f2cfcf;color:#8a2b2b}
+  .shape.p{background:#fbeef3;border-color:#eed2de;color:#7d3355}
+  .shape.i{background:#f1efe9;border-color:#e0ded4;color:#5c5a50}
+  .shape.a{background:#eaf1fa;border-color:#d3e0f0;color:#26527f}
+  .note-txt{font-size:10.5px;color:var(--text-3);line-height:1.45;margin-top:4px}
+  .code-ref{font-family:var(--mono);font-size:10px;color:#8a8a80;margin-top:5px;
+    border-top:1px dashed var(--line-soft);padding-top:4px;word-break:break-all}
+
+  #panel{position:absolute;top:52px;right:0;bottom:0;width:316px;background:var(--panel);
+    border-left:1px solid var(--line);padding:16px;overflow-y:auto;z-index:30;
+    transform:translateX(100%);transition:transform .18s ease}
+  #panel.open{transform:translateX(0)}
+  #panel h2{font-size:14px;font-weight:600;margin-bottom:2px}
+  #panel .ptag{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:20px;margin:6px 0 10px}
+  #panel .psub{font-size:12px;color:var(--text-2);margin-bottom:10px}
+  #panel h3{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;
+    letter-spacing:.6px;margin:14px 0 6px}
+  #panel .pbody{font-size:12.5px;line-height:1.65;color:var(--text)}
+  #panel .pshapes{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+  #panel .pconn{font-size:12px;line-height:1.7;color:var(--text-2)}
+  #panel .pconn b{color:var(--text);font-weight:500}
+  #panel .pcode{font-family:var(--mono);font-size:11px;background:#f6f5f2;border:1px solid var(--line-soft);
+    border-radius:7px;padding:7px 9px;color:#55534a;word-break:break-all;line-height:1.5}
+  #panel .close{position:absolute;top:12px;right:12px;border:none;background:none;font-size:16px;
+    color:var(--text-3);cursor:pointer;padding:2px 6px}
+  #panel .close:hover{color:var(--text)}
+
+  #formula{position:absolute;left:16px;bottom:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:10px 14px;z-index:25;max-width:min(600px,calc(100% - 340px));
+    box-shadow:0 2px 10px rgba(38,37,31,.07)}
+  #formula .ft{font-size:10.5px;font-weight:600;color:var(--text-3);letter-spacing:.6px;margin-bottom:5px}
+  #formula .fe{font-size:13px;line-height:1.9;font-family:var(--mono)}
+  #formula sub{font-size:9.5px}
+  #formula .w{color:#8a2b2b}
+  #zoomtag{position:absolute;right:16px;bottom:16px;font-family:var(--mono);font-size:11px;
+    color:var(--text-3);background:var(--panel);border:1px solid var(--line);border-radius:7px;
+    padding:3px 9px;z-index:25}
+  @media (max-width:760px){ #panel{width:100%} #formula{max-width:calc(100% - 32px)} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Scene-Scale Aerial Manipulation VLA · 架构流程图<span>节点可拖拽 · 点击看详情 · 维度与公式已标注</span></h1>
+  <div class="tools">
+    <button id="btn-fit">适应屏幕</button>
+    <button id="btn-reset">重置布局</button>
+    <button id="btn-export">导出布局</button>
+    <button id="btn-import">导入布局</button>
+    <button id="btn-labels" class="on">边标签: 开</button>
+    <button id="btn-help">说明</button>
+    <input id="import-file" type="file" accept=".json,application/json" style="display:none">
+  </div>
+</header>
+<div class="legend" id="legend"></div>
+<div class="hint">论文: Guo et al., <i>From Local Whole-Body VLA Behaviors to Scene-Scale Aerial Manipulation</i> (arXiv:2609.39670) · 操作: 拖节点 · 拖空白平移 · 滚轮缩放 · 单击看详情 · 虚线 = 反馈/参数引用, 实线 = 数据/执行流</div>
+
+<div id="stage">
+  <div id="world">
+    <div id="nlayer"></div>
+    <div id="llayer"></div>
+    <svg id="edges"><defs>
+      <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse" markerUnits="strokeWidth">
+        <path d="M0.6 0.6 L9.4 5 L0.6 9.4 Z" fill="#8a8880"/>
+      </marker>
+      <marker id="arw-hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse" markerUnits="strokeWidth">
+        <path d="M0.6 0.6 L9.4 5 L0.6 9.4 Z" fill="#26251f"/>
+      </marker>
+    </defs><g id="elayer"></g></svg>
+  </div>
+</div>
+
+<aside id="panel"><button class="close" id="panel-close">×</button><div id="panel-body"></div></aside>
+
+<div id="formula">
+  <div class="ft">Progress-Parameterized MINCO 轨迹实现 (Eq.8)</div>
+  <div class="fe">
+    min<sub>P,T,η,η<sub>ρ</sub></sub> &nbsp; J<sub>smooth</sub>
+    + J<sub>cont</sub>
+    + J<sub>prog</sub>
+    + J<sub>feas</sub>
+    &nbsp;<span class="w">s.t. 速度/加速度/体率/偏航率/关节率 + 全身无碰撞</span>
+  </div>
+</div>
+<div id="zoomtag">100%</div>
+
+<script>
+/* ===================== 数据模型 ===================== */
+/* 论文: From Local Whole-Body VLA Behaviors to Scene-Scale Aerial Manipulation
+   Weixiang Guo, Rui Jin, ... Lihua Xie (NTU), arXiv:2609.39670, 2026 */
+const BR = {
+  input : {c:'#5F5E5A', bg:'#F1EFE8', n:'输入 / 观测'},
+  synth : {c:'#854F0B', bg:'#FAEEDA', n:'监督合成管线 (Sec.IV)'},
+  vla   : {c:'#185FA5', bg:'#E6F1FB', n:'全身 VLA 策略 (Sec.IV)'},
+  mpar  : {c:'#0F6E56', bg:'#E1F5EE', n:'MPAR 实时对齐 (Sec.V)'},
+  compose:{c:'#993556', bg:'#FBEAF0', n:'Scene-Graph 场景级组合 (Sec.VI)'},
+  exec  : {c:'#534AB7', bg:'#EEEDFE', n:'物理执行 / 平台 (Sec.VII)'},
+  output: {c:'#A32D2D', bg:'#FCEBEB', n:'动作 / 轨迹输出'},
+  note  : {c:'#8a8880', bg:'#FFFFFF', n:'说明'},
+};
+const SHAPE_CLASS = {input:'i', synth:'d', vla:'a', mpar:'v', compose:'p', exec:'p', output:'l', note:'i'};
+
+const NODES = [
+/* ---------- 说明 ---------- */
+{id:'note_overview', br:'note', x:-830, y:-360, t:'系统总览 (Fig.2)', s:'统一框架 = 离线合成 + 在线执行',
+ note:'(A) 可重构 3DGS 监督合成 → (C) 合成观测+专家轨迹 → 训练全身 VLA；(D) 在线执行 = Scene-Graph 接地与转移 + 全身 VLA 预测 + MPAR + 动力学可行轨迹实现；(B) 物理 articulated UAM。',
+ detail:'核心主张:不把整个任务塞给单一策略,而是"学局部全身协调技能 + 显式处理物理实现与跨点组合"。无需在目标 UAM 上采集真实示范——监督完全由仿真/3DGS 合成。三大贡献:① 场景可重构监督合成管线;② MPAR(测量进度对齐实现);③ 基于场景图的组合接口。',
+ code:'Sec.III System Overview / Fig.2'},
+{id:'note_results', br:'note', x:-830, y:700, t:'关键实验结果', s:'MuJoCo 仿真 + 物理 UAM',
+ note:'跨点任务(Table I): 单体 whole-task 基线 0/50 vs 本文 21/50 (42%)。运行时扰动(Table II): MPAR 78/120 (65.0%) > nominal-time 71/120 (59.2%) > RTC-Direct 54/120 (45.0%)。',
+ detail:'MPAR 相对 nominal-time 把 episode 级相位误差 P50/P95 平均降低 0.212 / 0.315 s;跳过/重复弧长分别降低 7.44 / 1.89 cm;候选轨迹拒绝率从 17.42% 降到 12.81%;含碰撞运行从 22/120(RTC)→4/120(nominal)→1/120(MPAR)。消融(Table IV): 去关系接地 -G 则 0 个 episode 能解析全部目标;去拓扑路由 -R 导航碰撞上升;名义点 handoff -H 降低 handoff 成功率。',
+ code:'Sec.VII Experiments / Table I–IV'},
+
+/* ---------- (A/C) 离线监督合成 Sec.IV ---------- */
+{id:'scene_sample', br:'synth', x:-430, y:-360, t:'场景重构采样', s:'reconfigurable supervision',
+ shapes:['UAM 初始状态','target + distractor 身份/位姿'],
+ note:'每个 episode 在任务有效范围内采样 UAM 初始状态与目标/干扰物的身份和位姿。',
+ detail:'在几何与视觉两个层面重构任务:几何层决定物体放哪、UAM 从哪开始;视觉层由分离高斯负责外观。目的是无需真实示范即可大量生成多样化、任务条件化的监督。',
+ code:'Sec.IV Scene-Reconfigurable Supervision'},
+{id:'interaction_goal', br:'synth', x:-430, y:-140, t:'对象相对交互目标', s:'object-relative goal',
+ shapes:['interaction goal'],
+ note:'由采样配置 + 语言指令推导出相对于目标物体的交互目标。',
+ detail:'不是给定全局坐标,而是"相对目标物体"的交互意图,使同一技能可泛化到不同位姿的物体。',
+ code:'Sec.IV'},
+{id:'gaussian', br:'synth', x:-430, y:80, t:'分离高斯表示', s:'static env + movable assets',
+ shapes:['公共 metric frame','6-DoF 独立放置'],
+ note:'静态环境与可动资产各自用高斯表示,注册到同一度量坐标系;资产可独立以 6-DoF 位姿摆放,同时保留部署场景外观。',
+ detail:'3DGS 让"换一个物体位姿/身份"只需重摆对应高斯资产,环境外观不变——这是能廉价生成海量视觉监督并利于 sim-to-real 的关键。',
+ code:'Sec.IV (A) 3DGS supervision'},
+{id:'wb_planner', br:'synth', x:-70, y:-250, t:'全身专家规划器', s:'whole-body expert planner',
+ shapes:['aerial-base / arm / gripper 参考'],
+ note:'在运动、关节、连续性、碰撞约束下生成协调的空中底座+机械臂+夹爪参考轨迹,保留可行 rollout 作为专家行为。',
+ detail:'专家是"规划器"而非人类遥操作,因此满足耦合动力学与执行限制。这些可行 rollout 就是 VLA 的监督标签来源。',
+ code:'Sec.IV'},
+{id:'render', br:'synth', x:-70, y:0, t:'同步多视角渲染', s:'base + wrist camera',
+ shapes:['224 × 224 图像','base-cam + wrist-cam'],
+ note:'在每个采样时刻 t 从专家状态渲染同步的底座相机与腕部相机图像。',
+ detail:'同步多视角 = 给 VLA 的"眼睛"。底座相机看前方导航,腕部相机看精细操作/grounding。',
+ code:'Sec.IV'},
+{id:'train_data', br:'synth', x:300, y:-120, t:'训练数据窗口', s:'observation → expert chunk',
+ shapes:['obs: 多视角图 + 状态 x + 语言 ℓ','target: A(t:t+H)','39,200 windows ×2'],
+ note:'策略输入 = (多视角图像, 全身状态 x_t, 语言指令 ℓ);监督目标 = 对应的专家未来动作块 A(t:t+H)。',
+ detail:'仿真(MuJoCo)与物理(3DGS 渲染)各自微调,各 39,200 个窗口,用数据集专属的分位数归一化。对比:单体 whole-task 基线用 1,500 条整任务轨迹 = 231,989 窗口(本文局部技能窗口的 5.92 倍)。',
+ code:'Sec.IV / Sec.VII-B'},
+
+/* ---------- (D) 全身 VLA 策略 Sec.IV ---------- */
+{id:'obs_in', br:'input', x:300, y:-380, t:'在线观测', s:'runtime observation',
+ shapes:['base-cam 224×224','wrist-cam 224×224','proprioception'],
+ note:'运行时由机载相机与本体传感采集,送入 VLA。',
+ detail:'与训练期渲染的图像同构(都是 224×224 的 base+wrist 双视角)——这正是合成监督要对齐真实观测分布的原因。',
+ code:'Sec.IV'},
+{id:'state_z', br:'input', x:680, y:-380, t:'全身本体状态', s:'z_t ∈ R⁸',
+ shapes:['z_t = [θ_t, v^B_t, φ_t, ϑ_t]'],
+ note:'θ_t = 当前 3-DoF 机械臂配置;v^B_t = 偏航对齐机体系下的底座平移速度;φ_t / ϑ_t = roll / pitch。',
+ detail:'8 维 = 3(arm) + 3(base vel) + 2(roll,pitch)。本体状态经投影后作为动作专家的条件输入。',
+ code:'Sec.IV, z_t 定义'},
+{id:'pi05', br:'vla', x:680, y:-120, t:'π₀.₅ 全身 VLA', s:'PaliGemma + action expert',
+ shapes:['base: PaliGemma 语言模块','+ action expert','经 OpenPI 微调'],
+ note:'以预训练 π₀.₅ 为基座,通过 OpenPI 微调;把多视角图像、本体状态、语言指令映射为有限视界的底座-臂-夹爪动作块。',
+ detail:'这是整个系统的"学习策略"核心。只学"局部全身协调技能",跨点的全局逻辑交给 Scene-Graph 组合层,物理落地交给 MPAR。基座来自 Physical Intelligence 的 π₀.₅ (arXiv:2504.16054)。',
+ code:'Sec.IV, π0.5 via OpenPI [25]'},
+{id:'lora', br:'vla', x:680, y:140, t:'LoRA 适配器', s:'rank-16 / rank-32',
+ shapes:['rank-16 → PaliGemma','rank-32 → action expert'],
+ note:'对 PaliGemma 语言模块施加 rank-16 LoRA,对动作专家施加 rank-32 LoRA。',
+ detail:'训练: AdamW,30,000 次更新,batch 32,cosine 学习率从 2.5e-5 衰减到 2.5e-6(1,000 步 warmup),固定取 step-29999 checkpoint。复现注意:优化器状态须保持 FP32,纯 BF16 会梯度下溢掉点。',
+ code:'Sec.IV, LoRA 配置'},
+{id:'action_a', br:'output', x:1060, y:-120, t:'动作块预测', s:'a(t,k) ∈ R⁸ · 10 步',
+ shapes:['a = [θ*, g, Δp^B, Δψ]','10 actions @ 0.25s','horizon = 2.5s'],
+ note:'预测 10 个未来动作,间隔 0.25s(共 2.5s)。θ*=目标臂配置,g=夹爪闭合分数(g>0.5 为闭合),Δp^B/Δψ=相对观测时刻底座位姿的位置/偏航偏移。',
+ detail:'一个 chunk 内所有 waypoint 共享同一锚点(观测时刻底座位姿),而非递归累加。微调时关节目标相对 θ_t 做 delta 编码,运行时再转回绝对目标。',
+ code:'Sec.IV, a(t,k) 定义'},
+
+/* ---------- MPAR Sec.V ---------- */
+{id:'vla_path', br:'mpar', x:1060, y:140, t:'全身 VLA 路径表示', s:'chunk → 几何路径 q(s)',
+ shapes:['w_k = (p_k, ψ_k, θ_k, g_k, s_k)','q(s) = [p(s), ψ(s), θ(s)]'],
+ note:'动作块 A_o={a_k} 解码为同步全身 waypoint;分段插值连续分量得几何全身路径 q(s)。',
+ detail:'关键转变:把 s_k=(k+1)Δt 从"执行时钟"重解释为"路径进度",时序留给物理实现阶段决定。共享相位 s 同时索引底座/偏航/臂,保持它们的协调。离散夹爪指令保留其源 waypoint 关联,按重定时的几何进度触发。',
+ code:'Sec.V-A, Eq.(1)'},
+{id:'handoff_est', br:'mpar', x:1440, y:-300, t:'Handoff 状态估计', s:'measured-progress',
+ shapes:['x̂_h = 外推(p, v, a, θ, θ̇)'],
+ note:'新 chunk 在 t_r 到达,交接调度到 t_h;用残差在 Δt_h 上外推,估计交接时刻全身状态 x̂_h(Eq.2)。',
+ detail:'异步推理的核心问题:chunk 到达时,流逝时间已不能代表 UAM 真实进度。于是用"测量到的状态 + 命令状态残差"做二阶外推(位置)/一阶外推(关节),估计真正交接点的状态。',
+ code:'Sec.V-B, Eq.(2)'},
+{id:'measured_align', br:'mpar', x:1440, y:-80, t:'测量对齐相位', s:'投影到新路径',
+ shapes:['ŝ = argmin D(x̂_h, q(s))','s ∈ W(s_nom)'],
+ note:'把估计的交接状态投影到新鲜全身路径,在名义相位邻域 W(s_nom) 内取最小不一致的相位 ŝ(Eq.3);仅当满足恢复界且优于名义相位才接受,否则退回 s_nom。',
+ detail:'这是 MPAR 与 nominal-time 的唯一区别:nominal 按流逝时间选相位;MPAR 按"实测进度"选相位。D 度量预测交接状态与路径配置(含相位导出运动)的归一化差异。',
+ code:'Sec.V-B, Eq.(3)'},
+{id:'c2_bridge', br:'mpar', x:1440, y:140, t:'C² 连续接管桥', s:'bridge b(·)',
+ shapes:['b(0)=x_c⁻(t_h)','b(T_b)=q(s_join)'],
+ note:'从交接时刻的 active command 状态出发,用 C² bridge 到达前向可行的 join 相位,并匹配端点导数(Eq.5)。',
+ detail:'x̂_h 只用来"选对 VLA 路径后缀";真正作为桥边界的是当前命令状态 x_c⁻(t_h),从而保证命令连续、无跳变。若找不到可行接管,则拒绝该 chunk,保持已提交轨迹,从新观测重规划。',
+ code:'Sec.V-B, Eq.(5)'},
+{id:'minco', br:'mpar', x:1820, y:60, t:'MINCO 轨迹实现', s:'T4(base)+T2(yaw/arm)',
+ shapes:['联合优化 T_i, s_i','min J_smooth+J_cont+J_prog+J_feas'],
+ note:'沿用 QuadHand 框架:底座位置用 T4-MINCO,偏航与各臂关节用 T2-MINCO;联合优化区间时长 T_i 与顶点相位 s_i,保证进度单调(Eq.7)。',
+ detail:'J_smooth 罚高阶导数;J_cont 更强罚横向偏差并跟踪路径索引的偏航/臂;J_prog 罚相位畸变与进度率波动、抑制停滞;J_feas 罚速度/加速度/体率/偏航率/关节率越限与全身碰撞。提交前做密集可行性检查。执行率 ṡ_i≈(s_i−s_{i-1})/T_i,可加减速而不改变 VLA 行为顺序。',
+ code:'Sec.V-C, Eq.(6)(7)(8)'},
+{id:'traj_out', br:'output', x:1820, y:300, t:'连续可行轨迹', s:'z(t) = [p(t), ψ(t), θ(t)]',
+ shapes:['z(t) 平坦输出'],
+ note:'最终提交给平台执行的连续、动力学可行的全身轨迹。',
+ detail:'通过可行性检查后提交(unsafe publication = 提交了未过检的 MINCO 轨迹,两种约束变体均为 0 次)。视觉与本体反馈闭合局部执行环。',
+ code:'Sec.V-C'},
+
+/* ---------- Scene-Graph 场景级组合 Sec.VI ---------- */
+{id:'mission', br:'input', x:-430, y:720, t:'语言任务 + 场景图', s:'ℓ + Scene Graph G',
+ shapes:['mission ℓ','G: Area–Polyhedron 层级'],
+ note:'输入自然语言任务 ℓ 与预构建、注册到度量地图的场景图 G;G 用 Area–Polyhedron 层级组织物体实例,编码空间关系与自由空间连通性。',
+ detail:'基于 USS-Nav [22] 的多面体连通性与语义区域层级。当前系统依赖"预构建"场景图,未来工作要做在线构建与更新。',
+ code:'Sec.VI-A, Eq.(9)'},
+{id:'llm_compose', br:'compose', x:-70, y:720, t:'LLM 任务组合', s:'LLMCompose',
+ shapes:['Π_ℓ = (u_1, ..., u_N)','u_i ∈ {NAVIGATE, EXECUTEVLA, RECOVER}'],
+ note:'外部 LLM 用图上下文 + 可用局部 VLA 技能,把语言引用映射为图支持的类别与关系,解析隐含依赖,组合出有序的图接地任务计划 Π_ℓ。',
+ detail:'每一步只引用"图描述的任务目标",不指定度量坐标或控制命令——把"理解语言"和"精确控制"解耦。',
+ code:'Sec.VI-A, Eq.(9)'},
+{id:'fsm', br:'compose', x:-70, y:940, t:'FSM 执行器', s:'state machine',
+ shapes:['INSTANTIATEFSM(Π_ℓ)','按导航/VLA 结果推进转移'],
+ note:'计划被确定性执行器实例化为状态机(Algorithm 1),转移依据导航与 VLA 结果推进。',
+ detail:'Algorithm 1 主循环:取当前步 → 接地过滤 → 拓扑搜索 → 装配走廊 → 执行转移 → 验证 handoff → 执行 VLA(MPAR) → 更新 FSM。任一环节失败则 REJECT 并继续。',
+ code:'Sec.VI-A, Algorithm 1'},
+{id:'grounding', br:'compose', x:300, y:800, t:'实例接地', s:'instance grounding',
+ shapes:['Q_i = (c_i, Φ_i)','要求 |C(Q_i)| = 1'],
+ note:'每个目标相关动作带关系描述 Q_i=(类别 c_i, 关系集 Φ_i);确定性解析器选出匹配类别与全部关系的物体节点,仅当查询确定唯一实例时才执行。',
+ detail:'唯一性约束 |C(Q_i)|=1 是安全闸:歧义即拒绝。消融 -G 表明去掉关系接地后没有一个 episode 能解析出全部目标实例。',
+ code:'Sec.VI-B'},
+{id:'interaction_region', br:'compose', x:680, y:800, t:'交互区域构建', s:'interaction region',
+ shapes:['I_κ(v*) = 技能条件模板','∩ clearance-eroded Polyhedra','→ 候选 handoff 集 H*_i'],
+ note:'对解析出的唯一实例 v*,技能条件几何模板定义一个交互区域(而非单点);与净空腐蚀后的可达多面体求交并强制全身可行,得候选 handoff 集 H*_i。',
+ detail:'关键:关系语言目标不仅要解析到"物体实例",还要落到"可发起局部技能的可行全身 handoff 状态"。消融 -H 用名义点目标代替区域,会降低 handoff 成功率。',
+ code:'Sec.VI-B'},
+{id:'topology_transfer', br:'compose', x:1060, y:800, t:'拓扑引导全身转移', s:'topology-guided transfer',
+ shapes:['选 h*_i + 多面体路由 Γ_i','→ aerial corridor'],
+ note:'每个候选 handoff 映射到所含多面体;图搜索联合选终端 handoff h*_i 与连通多面体路由 Γ_i(按路由代价与终端可行性);多面体序列投影成空中走廊约束全身转移。',
+ detail:'提供跨点的全局路由结构 + 无碰撞可行走廊。消融 -R 去掉拓扑路由会显著增加导航碰撞。',
+ code:'Sec.VI-C'},
+{id:'handoff_verify', br:'compose', x:1440, y:800, t:'Handoff 验证', s:'verify & hand to VLA',
+ shapes:['measured pose/motion','满足交互区域容差?'],
+ note:'到达后,仅当实测位姿与运动满足交互区域容差,才把控制交给局部 VLA;否则拒绝该 handoff。',
+ detail:'这是"组合层→VLA 层"的交接闸门。验证通过即触发 EXECUTEVLA:进入局部全身 VLA 执行循环(观测→VLA→MPAR→执行),直到技能结束。',
+ code:'Sec.VI-C / Algorithm 1 行14'},
+
+/* ---------- 物理执行 Sec.VII ---------- */
+{id:'remote_vla', br:'exec', x:1060, y:-380, t:'远程 VLA 推理', s:'NVIDIA RTX 5090',
+ shapes:['VLA 推理远程运行'],
+ note:'机载只做感知/控制,VLA 推理在远程 RTX 5090 上运行;异步返回动作块。',
+ detail:'远程推理→异步返回→真实进度漂移,正是 MPAR 要解决的根因。未来工作包含机载推理。',
+ code:'Sec.VII-A'},
+{id:'uam', br:'exec', x:1820, y:-220, t:'物理 Articulated UAM', s:'quadrotor + 3-DoF arm + gripper',
+ shapes:['Jetson Orin NX','RealSense D450 + mono RGB'],
+ note:'物理平台: 四旋翼 + 3 自由度机械臂 + 夹爪 + Jetson Orin NX + Intel RealSense D450 深度相机 + 单目 RGB 相机。',
+ detail:'执行 MINCO 轨迹,并把视觉/本体反馈回传闭环;技能结果推进 FSM 任务。物理全栈验证: oracle 目标与可行 handoff 下,瓶抓取/方块抓取/浇水/入库分别 2/5、1/5、3/5、3/5;跨点 Water Plant 任务 2/5。',
+ code:'Sec.VII-A / Sec.VII-E'},
+];
+
+const EDGES = [
+  /* 离线监督合成 */
+  ['scene_sample','interaction_goal','采样配置'],
+  ['scene_sample','gaussian','资产位姿'],
+  ['interaction_goal','wb_planner','交互目标'],
+  ['gaussian','render','高斯渲染'],
+  ['wb_planner','render','专家状态'],
+  ['wb_planner','train_data','expert chunk A'],
+  ['render','train_data','多视角图像'],
+  ['train_data','pi05','离线监督'],
+  /* VLA 策略 */
+  ['obs_in','pi05','图像+指令'],
+  ['state_z','pi05','z_t'],
+  ['lora','pi05','LoRA 适配',true],
+  ['pi05','action_a','预测 chunk'],
+  ['remote_vla','pi05','远程托管',true],
+  /* Scene-Graph 组合 */
+  ['mission','llm_compose','ℓ + G'],
+  ['llm_compose','fsm','plan Π_ℓ'],
+  ['fsm','grounding','当前步 u_i'],
+  ['grounding','interaction_region','唯一实例 v*'],
+  ['interaction_region','topology_transfer','H*_i'],
+  ['topology_transfer','handoff_verify','route Γ_i'],
+  ['handoff_verify','obs_in','EXECUTEVLA 触发'],
+  /* MPAR */
+  ['action_a','vla_path','chunk A_o'],
+  ['vla_path','handoff_est','waypoints'],
+  ['handoff_est','measured_align','x̂_h'],
+  ['measured_align','c2_bridge','ŝ'],
+  ['c2_bridge','minco','join 相位'],
+  ['vla_path','minco','VLA 路径后缀'],
+  ['minco','traj_out','z(t)'],
+  ['traj_out','uam','执行轨迹'],
+  /* 闭环反馈 */
+  ['uam','handoff_est','measured state',true],
+  ['uam','obs_in','视觉/本体反馈',true],
+  ['uam','fsm','skill 结果',true],
+];
+
+/* ===================== 渲染 ===================== */
+const stage = document.getElementById('stage');
+const world = document.getElementById('world');
+const nlayer = document.getElementById('nlayer');
+const llayer = document.getElementById('llayer');
+const elayer = document.getElementById('elayer');
+const svg = document.getElementById('edges');
+const panel = document.getElementById('panel');
+const panelBody = document.getElementById('panel-body');
+const zoomtag = document.getElementById('zoomtag');
+
+const nodeById = {};
+const edgeEls = [];
+let selected = null;
+const LS_KEY = 'scene-aerial-vla-flow-v1';
+
+/* 图例 */
+(function(){
+  const lg = document.getElementById('legend');
+  Object.entries(BR).forEach(([k,v])=>{
+    if(k==='note') return;
+    const d = document.createElement('span');
+    d.className = 'chip';
+    d.innerHTML = `<i style="background:${v.c}"></i>${v.n}`;
+    lg.appendChild(d);
+  });
+  const extra = document.createElement('span');
+  extra.className = 'chip';
+  extra.innerHTML = `<i style="background:#fff;border:1.5px dashed #8a8880"></i>虚线 = 反馈/参数引用`;
+  lg.appendChild(extra);
+})();
+
+function shapeClass(n){ return SHAPE_CLASS[n.br] || 'i'; }
+
+function buildNodes(){
+  NODES.forEach(n=>{
+    n.w = 236;
+    const el = document.createElement('div');
+    el.className = 'node' + (n.frozen ? ' frozen' : '') + (n.br==='note' ? ' note' : '');
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+    el.dataset.id = n.id;
+    const br = BR[n.br];
+    const shapes = (n.shapes||[]).map(s=>`<span class="shape ${shapeClass(n)}">${s}</span>`).join('');
+    el.innerHTML =
+      `<div class="nhead"><i style="background:${br.c}"></i><span class="ntitle">${n.t}</span></div>` +
+      (n.s ? `<div class="nsub">${n.s}</div>` : '') +
+      (shapes ? `<div class="shapes">${shapes}</div>` : '') +
+      (n.note ? `<div class="note-txt">${n.note}</div>` : '');
+    nlayer.appendChild(el);
+    n.el = el;
+    nodeById[n.id] = n;
+    el.addEventListener('pointerdown', e=>onNodeDown(e, n));
+    el.addEventListener('pointerenter', ()=>highlight(n.id, true));
+    el.addEventListener('pointerleave', ()=>highlight(n.id, false));
+  });
+  NODES.forEach(n=>{ n.h = n.el.offsetHeight; });
+}
+
+function anchor(n, side){
+  if(side==='r') return {x:n.x+n.w, y:n.y+n.h/2};
+  if(side==='l') return {x:n.x,     y:n.y+n.h/2};
+  if(side==='t') return {x:n.x+n.w/2, y:n.y};
+  return {x:n.x+n.w/2, y:n.y+n.h};
+}
+function pickSides(a,b){
+  const ac = {x:a.x+a.w/2, y:a.y+a.h/2}, bc = {x:b.x+b.w/2, y:b.y+b.h/2};
+  const dx = bc.x-ac.x, dy = bc.y-ac.y;
+  if(Math.abs(dx) >= Math.abs(dy)) return dx>0 ? ['r','l'] : ['l','r'];
+  return dy>0 ? ['b','t'] : ['t','b'];
+}
+function pathD(p1,p2,horiz){
+  if(horiz){
+    const k = Math.max(40, Math.min(150, Math.abs(p2.x-p1.x)*0.5));
+    return `M ${p1.x} ${p1.y} C ${p1.x+k} ${p1.y}, ${p2.x-k} ${p2.y}, ${p2.x} ${p2.y}`;
+  }
+  const k = Math.max(30, Math.min(110, Math.abs(p2.y-p1.y)*0.5));
+  return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y+k}, ${p2.x} ${p2.y-k}, ${p2.x} ${p2.y}`;
+}
+function bezMid(p1,p2,horiz){
+  let c1,c2;
+  if(horiz){
+    const k = Math.max(40, Math.min(150, Math.abs(p2.x-p1.x)*0.5));
+    c1 = {x:p1.x+k, y:p1.y}; c2 = {x:p2.x-k, y:p2.y};
+  }else{
+    const k = Math.max(30, Math.min(110, Math.abs(p2.y-p1.y)*0.5));
+    c1 = {x:p1.x, y:p1.y+k}; c2 = {x:p2.x, y:p2.y-k};
+  }
+  return {x:(p1.x+3*c1.x+3*c2.x+p2.x)/8, y:(p1.y+3*c1.y+3*c2.y+p2.y)/8};
+}
+
+const SIDE_OVERRIDE = {
+  'handoff_verify>obs_in':'tl',
+  'uam>obs_in':'ll',
+};
+function sidesFor(a,b){
+  const ov = SIDE_OVERRIDE[a.id+'>'+b.id];
+  if(ov) return [ov[0], ov[1]];
+  return pickSides(a,b);
+}
+
+function buildEdges(){
+  svg.setAttribute('width', 3000);
+  svg.setAttribute('height', 1600);
+  EDGES.forEach(([from,to,label,dashed])=>{
+    const a = nodeById[from], b = nodeById[to];
+    const casing = document.createElementNS('http://www.w3.org/2000/svg','path');
+    casing.setAttribute('class','casing');
+    elayer.appendChild(casing);
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('class','edge' + (dashed?' dashed':''));
+    p.setAttribute('marker-end','url(#arw)');
+    elayer.appendChild(p);
+    const lb = document.createElement('div');
+    lb.className = 'elabel';
+    lb.textContent = label;
+    if(!label) lb.style.display = 'none';
+    llayer.appendChild(lb);
+    edgeEls.push({a,b,p,casing,lb});
+  });
+  redrawEdges();
+}
+function redrawEdges(){
+  edgeEls.forEach(e=>{
+    const [sa,sb] = sidesFor(e.a,e.b);
+    const p1 = anchor(e.a,sa), p2 = anchor(e.b,sb);
+    const horiz = (sa==='r'||sa==='l');
+    const d = pathD(p1,p2,horiz);
+    e.p.setAttribute('d', d);
+    e.casing.setAttribute('d', d);
+    const m = bezMid(p1,p2,horiz);
+    if(horiz){ e.lb.style.left = m.x+'px'; e.lb.style.top = (m.y-16)+'px'; }
+    else     { e.lb.style.left = (m.x-18)+'px'; e.lb.style.top = m.y+'px'; }
+  });
+}
+function redrawNode(n){
+  n.el.style.left = n.x+'px';
+  n.el.style.top  = n.y+'px';
+  redrawEdges();
+}
+
+/* ===================== 交互 ===================== */
+let view = {x:0, y:0, k:1};
+function applyView(){
+  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+  zoomtag.textContent = Math.round(view.k*100)+'%';
+  saveState();
+}
+function clampK(k){ return Math.max(0.2, Math.min(2.4, k)); }
+
+function onNodeDown(e, n){
+  if(e.button!==0) return;
+  e.stopPropagation();
+  n.el.setPointerCapture(e.pointerId);
+  const sx = e.clientX, sy = e.clientY, ox = n.x, oy = n.y;
+  let moved = 0;
+  n.el.classList.add('dragging');
+  const mv = ev=>{
+    const dx = (ev.clientX-sx)/view.k, dy = (ev.clientY-sy)/view.k;
+    moved = Math.max(moved, Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy));
+    n.x = ox+dx; n.y = oy+dy;
+    redrawNode(n);
+  };
+  const up = ()=>{
+    n.el.classList.remove('dragging');
+    n.el.releasePointerCapture(e.pointerId);
+    n.el.removeEventListener('pointermove', mv);
+    n.el.removeEventListener('pointerup', up);
+    if(moved < 5) selectNode(n);
+    saveState();
+  };
+  n.el.addEventListener('pointermove', mv);
+  n.el.addEventListener('pointerup', up);
+}
+
+stage.addEventListener('pointerdown', e=>{
+  if(e.target.closest('.node')) return;
+  closePanel();
+  stage.classList.add('panning');
+  const sx = e.clientX, sy = e.clientY, ox = view.x, oy = view.y;
+  const mv = ev=>{ view.x = ox + (ev.clientX-sx); view.y = oy + (ev.clientY-sy); applyView(); };
+  const up = ()=>{
+    stage.classList.remove('panning');
+    window.removeEventListener('pointermove', mv);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', mv);
+  window.addEventListener('pointerup', up);
+});
+
+stage.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const k2 = clampK(view.k * (e.deltaY<0 ? 1.12 : 0.89));
+  view.x = mx - (mx - view.x) * k2/view.k;
+  view.y = my - (my - view.y) * k2/view.k;
+  view.k = k2;
+  applyView();
+}, {passive:false});
+
+function highlight(id, on){
+  edgeEls.forEach(e=>{
+    const touch = (e.a.id===id || e.b.id===id);
+    if(on){
+      if(touch){ e.p.classList.add('hl'); e.p.classList.remove('dim'); e.p.setAttribute('marker-end','url(#arw-hl)'); }
+      else e.p.classList.add('dim');
+      if(touch && e.lb.textContent) e.lb.style.opacity = 1;
+    }else{
+      e.p.classList.remove('hl','dim');
+      e.p.setAttribute('marker-end','url(#arw)');
+      e.lb.style.opacity = '';
+    }
+  });
+  NODES.forEach(n=>{
+    if(!on) { n.el.classList.remove('dim'); return; }
+    const touch = edgeEls.some(e=>(e.a.id===id||e.b.id===id) && (e.a.id===n.id||e.b.id===n.id));
+    n.el.classList.toggle('dim', !touch && n.id!==id);
+  });
+}
+
+function selectNode(n){
+  NODES.forEach(m=>m.el.classList.remove('selected'));
+  n.el.classList.add('selected');
+  selected = n;
+  const br = BR[n.br];
+  const ins = [], outs = [];
+  EDGES.forEach(([f,t,l])=>{ if(t===n.id) ins.push(nodeById[f].t); if(f===n.id) outs.push(nodeById[t].t); });
+  panelBody.innerHTML =
+    `<h2>${n.t}</h2>` +
+    (n.s?`<div class="psub">${n.s}</div>`:'') +
+    `<span class="ptag" style="background:${br.bg};color:${br.c}">${br.n}${n.frozen?' · frozen':''}</span>` +
+    (n.shapes?`<h3>维度 / 形式</h3><div class="pshapes">${n.shapes.map(s=>`<span class="shape ${shapeClass(n)}">${s}</span>`).join('')}</div>`:'') +
+    (n.detail?`<h3>说明</h3><div class="pbody">${n.detail}</div>`:'') +
+    (n.note?`<h3>要点</h3><div class="pbody">${n.note}</div>`:'') +
+    (ins.length?`<h3>输入来自</h3><div class="pconn">${ins.map(x=>`<b>·</b> ${x}`).join('<br>')}</div>`:'') +
+    (outs.length?`<h3>输出到</h3><div class="pconn">${outs.map(x=>`<b>·</b> ${x}`).join('<br>')}</div>`:'') +
+    (n.code?`<h3>论文章节 / 公式</h3><div class="pcode">${n.code}</div>`:'');
+  panel.classList.add('open');
+}
+function closePanel(){ panel.classList.remove('open'); NODES.forEach(m=>m.el.classList.remove('selected')); selected=null; }
+document.getElementById('panel-close').addEventListener('click', closePanel);
+
+/* 工具按钮 */
+function fit(){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  NODES.forEach(n=>{ x0=Math.min(x0,n.x); y0=Math.min(y0,n.y); x1=Math.max(x1,n.x+n.w); y1=Math.max(y1,n.y+n.h); });
+  const pad = 56;
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  const k = clampK(Math.min((sw-pad*2)/(x1-x0), (sh-pad*2)/(y1-y0)));
+  view.k = k;
+  view.x = (sw - (x1-x0)*k)/2 - x0*k;
+  view.y = (sh - (y1-y0)*k)/2 - y0*k;
+  applyView();
+}
+document.getElementById('btn-fit').addEventListener('click', fit);
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  localStorage.removeItem(LS_KEY);
+  NODES.forEach(n=>{ n.x=n.px; n.y=n.py; });
+  NODES.forEach(n=>{ n.x=n.px; n.y=n.py; redrawNode(n); });
+  fit();
+});
+let showLabels = true;
+const btnLabels = document.getElementById('btn-labels');
+btnLabels.addEventListener('click', ()=>{
+  showLabels = !showLabels;
+  btnLabels.classList.toggle('on', showLabels);
+  btnLabels.textContent = showLabels ? '边标签: 开' : '边标签: 关';
+  edgeEls.forEach(ed=>{ ed.lb.classList.toggle('hide', !showLabels); });
+});
+document.getElementById('btn-help').addEventListener('click', ()=>{
+  panelBody.innerHTML =
+    `<h2>使用说明</h2>
+     <div class="pbody" style="line-height:2">
+     <b>拖动节点</b>:按住节点拖动,自动重排连线。<br>
+     <b>平移画布</b>:在空白处按住拖动。<br>
+     <b>缩放</b>:滚轮(以鼠标位置为中心)。<br>
+     <b>查看详情</b>:单击任意节点,右侧显示维度、要点、输入输出与论文出处。<br>
+     <b>高亮链路</b>:鼠标悬停节点,相关连边加粗、其余淡出。<br>
+     <b>适应屏幕 / 重置布局</b>:一键看全貌 / 恢复初始排版。<br><br>
+     <b>实线</b> = 数据流 / 执行流;<b>虚线</b> = 反馈或参数引用(如 LoRA 适配、measured-state 反馈)。<br><br>
+     <b>读图主线</b>:<br>
+     ① 左上 <b>监督合成</b>(3DGS + 全身专家规划)→ 训练数据 → <b>π₀.₅ 全身 VLA</b>;<br>
+     ② 左下 <b>Scene-Graph 组合</b>(LLM→FSM→接地→交互区域→拓扑转移→handoff 验证)决定何时调用局部 VLA;<br>
+     ③ 验证通过触发观测 → VLA 预测动作块 → <b>MPAR</b>(路径表示→handoff 估计→测量对齐→C² 桥→MINCO)变成连续可行轨迹;<br>
+     ④ 右侧 <b>物理 UAM</b> 执行并把 measured state / 视觉本体 / skill 结果回传闭环。<br><br>
+     <b>导出布局</b>:把当前坐标+视野下载成 JSON;<b>导入布局</b>:一键还原(换端口/电脑/浏览器都有效)。
+     </div>`;
+  panel.classList.add('open');
+});
+
+/* 导出 / 导入布局 */
+function exportLayout(){
+  const pos = {};
+  NODES.forEach(n=>{ pos[n.id] = [Math.round(n.x), Math.round(n.y)]; });
+  const data = { key: LS_KEY, savedAt: new Date().toISOString(), pos, view };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'scene-aerial-vla-flow-layout.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function applyLayout(st){
+  if(st.pos) NODES.forEach(n=>{ if(st.pos[n.id]){ n.px = n.x; n.py = n.y; n.x = st.pos[n.id][0]; n.y = st.pos[n.id][1]; } });
+  if(st.view) view = st.view;
+  NODES.forEach(redrawNode);
+  applyView();
+  saveState();
+}
+function importLayout(file){
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    try{
+      const st = JSON.parse(fr.result);
+      if(!st.pos) throw new Error('缺少 pos 字段');
+      applyLayout(st);
+      alert('布局已导入并保存到本地浏览器。');
+    }catch(err){ alert('导入失败:' + err.message); }
+  };
+  fr.readAsText(file);
+}
+document.getElementById('btn-export').addEventListener('click', exportLayout);
+const importInput = document.getElementById('import-file');
+document.getElementById('btn-import').addEventListener('click', ()=> importInput.click());
+importInput.addEventListener('change', ()=>{ if(importInput.files[0]) importLayout(importInput.files[0]); importInput.value=''; });
+
+/* 持久化 */
+function saveState(){
+  try{
+    const pos = {};
+    NODES.forEach(n=>{ pos[n.id] = [Math.round(n.x), Math.round(n.y)]; });
+    localStorage.setItem(LS_KEY, JSON.stringify({pos, view}));
+  }catch(e){}
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    const st = JSON.parse(raw);
+    if(st.pos) NODES.forEach(n=>{ if(st.pos[n.id]){ n.px = n.x; n.py = n.y; n.x = st.pos[n.id][0]; n.y = st.pos[n.id][1]; } });
+    if(st.view) view = st.view;
+    return true;
+  }catch(e){ return false; }
+}
+
+/* 启动 */
+NODES.forEach(n=>{ n.px = n.x; n.py = n.y; });
+buildNodes();
+buildEdges();
+NODES.forEach(redrawNode);
+fit();
+window.addEventListener('resize', ()=>{ /* 保持视图 */ });
+</script>
+</body>
+</html>

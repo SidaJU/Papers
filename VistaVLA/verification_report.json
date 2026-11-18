@@ -1,0 +1,68 @@
+{
+  "checked_on": "2026-11-18",
+  "paper": "arXiv:2607.12356v2",
+  "pdf_pages": 15,
+  "pdf_sha256": "1b191bbf3e28201df5f6694a2ea244fa6b5888b80c5beb0fe1b545964cdc4fa8",
+  "html": "VistaVLA_architecture.html",
+  "html_sha256": "99543a0519ee7fd97d7da2d49b3cb8a63add37f6a7dacc75ee32fa5764300787",
+  "reference_html": "C:/Users/theozhu/Documents/xwechat_files/wxid_x5n3wl0tq8t412_b74e/msg/file/2026-11/arch_reference_source.html",
+  "reference_html_sha256": "231f0bb03471b9455d9021d523c50a589c97c36e29f61b35c217c5a8eeb568b6",
+  "reference_template_method": "以用户指定HTML为模板，仅替换NODES/EDGES/BR、标题、hint、formula、help文案、LS_KEY与导出文件名；DOM层级、CSS、渲染函数、交互函数、DEFAULT_VIEW、restored=false、固定SVG尺寸和发布版启动流程逐行保留。",
+  "correction": "撤回上一版自行设计的多标签/43节点/66边页面。用户指出节点过多且格式不同；现按指定参考HTML的同构模板重写，节点缩减为22个、连线27条，去掉视图标签、搜索框、状态栏、动态banner和多视图切换。",
+  "current_scale": {
+    "nodes": 22,
+    "edges": 27,
+    "dashed_edges": 7,
+    "br_categories": 9,
+    "legend_chips": 9,
+    "note_nodes": 1,
+    "default_zoom": 0.6857,
+    "fixed_svg": [2600, 1300],
+    "local_storage_key": "vistavla-flow-v1",
+    "export_filename": "vistavla-flow-layout.json"
+  },
+  "strict_reference_format_checks": [
+    "DOM ids: btn-fit / btn-reset / btn-export / btn-import / btn-labels / btn-help / import-file / stage / world / nlayer / llayer / edges / elayer / panel / panel-body / zoomtag / legend / formula",
+    "header 52px; stage inset top 52px; node width 232px; panel width 308px",
+    "nhead color dot, ntitle, nsub, shapes, shape class mapping, note-txt, unused code-ref style",
+    "BR has 9 categories and SHAPE_CLASS mapping; legend skips note and appends one dashed chip",
+    "each edge uses casing + edge paths; two arrow markers; fixed SVG 2600x1300; horizontal/vertical Bezier and label offsets preserved",
+    "DEFAULT_VIEW fixed zoom 0.6857; restored=false; loadState defined but never called; resize listener empty",
+    "node drag divides by view.k; canvas pan does not divide by view.k; wheel zoom anchored at cursor; 5px click threshold",
+    "fit/reset/export/import/saveState/applyLayout/help/selectNode/highlight functions keep reference behavior",
+    "fixed-width header is clipped by body overflow:hidden on mobile, as in the reference template"
+  ],
+  "source_audit": {
+    "basis": "本地PDF §3 p3–6、Figure 2 p4、§4 p7–8；与arXiv v2标题及方法交叉核对",
+    "checked": [
+      "SigLIP2+DINOv2拼接2176维，经AE压缩128维",
+      "Stage I训练用两路标定RGB-D context和第三目标视角；在线推理RGB+poses，不提供depth/第三novel-target",
+      "RGB/depth/feature渲染与L_dep中间深度监督；L_stage2保留RGB-D目标并加入L_feat",
+      "约100K→约7K→N<1000→64个summary tokens",
+      "Morton按中心排序交替分A/B；B按语义余弦在全部A中匹配，合并B最佳匹配top50%",
+      "64个query读取GS K/V，两层decoder后投影到未指定的d_llm",
+      "VLA输入顺序X_vis,X_lang,X_gs,X_act；没有语言到MtQ decoder的边",
+      "state s直接进入动作头；动作损失L1；K_exec=4仅是实机执行前缀，不等于预测K",
+      "未将freeze/LoRA rank/动作维度/d_llm/位置编码/损失权重等未披露信息写成确认事实",
+      "唯一虚线框是边界说明，不是已确认frozen权重"
+    ],
+    "formula_box": ["L_stage1 = λ_rgb·L_rgb + λ_dep·L_dep", "L_stage2 = L_stage1 + λ_feat·L_feat", "L_act = Σ_t ‖â_t − a_t‖₁；未给统一总loss或数值权重"]
+  },
+  "browser_validation": {
+    "tool": "Playwright CLI 0.1.24, independent Microsoft Edge session",
+    "passed_checks": 93,
+    "final_complete_run_passed": true,
+    "runtime_or_console_errors_in_final_run": [],
+    "desktop_viewport": [1600, 1000],
+    "mobile_viewport": [390, 844],
+    "coverage": ["无LingBot业务残留", "无上一版自定义DOM", "参考DOM/CSS尺寸", "22节点/27边/7虚线边", "PDF页码依据", "图例与公式卡", "固定默认视野与发布版启动", "节点详情/悬停高亮", "鼠标拖拽/画布平移/滚轮缩放", "边标签开关", "适应屏幕且不重叠", "重置", "布局导出/有效导入/无效导入", "帮助面板", "移动端body裁剪与全宽抽屉"],
+    "temporary_artifacts_cleaned": "测试脚本、浏览器截图、PDF抽取文本、Figure 2页面渲染与.playwright-cli目录已清理；本记录只保留核验结论。"
+  },
+  "official_code": {
+    "confirmed_repository": null,
+    "clone_performed": false,
+    "search_record": "code_search.json",
+    "status": "截至此次检索未发现可确认的公开实现，不等于证明没有代码。排除了arXiv:2602.05049同名VISTA网页。"
+  },
+  "scope": "核验论文陈述映射和网页交互，不是论文模型实现或实验复现；未披露实现细节仍无法认证。"
+}

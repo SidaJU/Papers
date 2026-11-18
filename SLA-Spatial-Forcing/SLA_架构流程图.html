@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SLA · 架构流程图（交互版）</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --panel:#ffffff; --line:#d9d7d0; --line-soft:#e8e6e0;
+    --text:#26251f; --text-2:#6b6a63; --text-3:#9a988e;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px}
+
+  header{height:52px;display:flex;align-items:center;gap:14px;padding:0 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);position:relative;z-index:20}
+  header h1{font-size:14px;font-weight:600;letter-spacing:.2px;white-space:nowrap}
+  header h1 span{color:var(--text-3);font-weight:400;margin-left:8px;font-size:12px}
+  .tools{display:flex;gap:6px;margin-left:auto;align-items:center}
+  button{font-family:var(--sans);font-size:12px;color:var(--text);background:#fff;
+    border:1px solid var(--line);border-radius:7px;padding:5px 11px;cursor:pointer;line-height:1.4}
+  button:hover{border-color:#b9b7ae;background:#faf9f6}
+  button.on{background:#26251f;color:#fff;border-color:#26251f}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;padding:6px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line-soft);position:relative;z-index:19}
+  .chip{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2);white-space:nowrap}
+  .chip i{width:9px;height:9px;border-radius:2.5px;display:block;flex:none}
+  .hint{font-size:11px;color:var(--text-3);padding:0 16px 6px;background:var(--panel)}
+
+  #stage{position:absolute;inset:52px 0 0 0;overflow:hidden;cursor:grab;touch-action:none}
+  #stage.panning{cursor:grabbing}
+  #world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+  #edges{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+  .casing{fill:none;stroke:#f6f5f2;stroke-width:5;stroke-linecap:round;opacity:1}
+  .edge{fill:none;stroke:#a9a7a0;stroke-width:1.6;opacity:.62}
+  .edge.dashed{stroke-dasharray:5 4}
+  .edge.hl{stroke:#26251f;stroke-width:2.6;opacity:1}
+  .edge.dim{opacity:.1}
+  .elabel{position:absolute;font-size:10.5px;color:var(--text-2);background:rgba(255,255,255,.92);
+    border:1px solid var(--line-soft);border-radius:5px;padding:1px 6px;white-space:nowrap;
+    transform:translate(-50%,-50%);pointer-events:none;font-family:var(--mono)}
+  .elabel.hide{display:none}
+
+  .node{position:absolute;width:240px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:9px 11px 10px;cursor:grab;user-select:none;
+    box-shadow:0 1px 2px rgba(38,37,31,.05);transition:box-shadow .12s,border-color .12s}
+  .node:hover{border-color:#b3b1a8;box-shadow:0 2px 8px rgba(38,37,31,.09)}
+  .node.dragging{cursor:grabbing;box-shadow:0 6px 18px rgba(38,37,31,.16);z-index:50}
+  .node.selected{border-color:#26251f;border-width:1.5px}
+  .node.dim{opacity:.35}
+  .node.frozen{border-style:dashed;border-width:1.5px}
+  .node.note{cursor:default;background:#fffdf5}
+  .nhead{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+  .nhead i{width:8px;height:8px;border-radius:2.5px;flex:none}
+  .ntitle{font-size:12.5px;font-weight:600;line-height:1.3}
+  .nsub{font-size:11px;color:var(--text-2);margin-bottom:5px;line-height:1.35}
+  .shapes{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 2px}
+  .shape{font-family:var(--mono);font-size:10.5px;background:#f1efe9;border:1px solid var(--line-soft);
+    border-radius:5px;padding:1.5px 6px;color:#4a4840;white-space:nowrap}
+  .shape.k{background:#eef2f7;border-color:#d5e0ec;color:#2c4a6b}
+  .shape.v{background:#eaf4ef;border-color:#cfe6da;color:#255a45}
+  .shape.d{background:#fbf1e2;border-color:#eed9b8;color:#7a5414}
+  .shape.l{background:#fdecec;border-color:#f2cfcf;color:#8a2b2b}
+  .shape.p{background:#fbeef3;border-color:#eed2de;color:#7d3355}
+  .shape.i{background:#f1efe9;border-color:#e0ded4;color:#5c5a50}
+  .shape.a{background:#eaf1fa;border-color:#d3e0f0;color:#26527f}
+  .note-txt{font-size:10.5px;color:var(--text-3);line-height:1.45;margin-top:4px}
+
+  #panel{position:absolute;top:52px;right:0;bottom:0;width:320px;background:var(--panel);
+    border-left:1px solid var(--line);padding:16px;overflow-y:auto;z-index:30;
+    transform:translateX(100%);transition:transform .18s ease}
+  #panel.open{transform:translateX(0)}
+  #panel h2{font-size:14px;font-weight:600;margin-bottom:2px}
+  #panel .ptag{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:20px;margin:6px 0 10px}
+  #panel .psub{font-size:12px;color:var(--text-2);margin-bottom:10px}
+  #panel h3{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;
+    letter-spacing:.6px;margin:14px 0 6px}
+  #panel .pbody{font-size:12.5px;line-height:1.65;color:var(--text)}
+  #panel .pshapes{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+  #panel .pconn{font-size:12px;line-height:1.7;color:var(--text-2)}
+  #panel .pconn b{color:var(--text);font-weight:500}
+  #panel .pcode{font-family:var(--mono);font-size:11px;background:#f6f5f2;border:1px solid var(--line-soft);
+    border-radius:7px;padding:7px 9px;color:#55534a;word-break:break-all;line-height:1.5}
+  #panel .close{position:absolute;top:12px;right:12px;border:none;background:none;font-size:16px;
+    color:var(--text-3);cursor:pointer;padding:2px 6px}
+  #panel .close:hover{color:var(--text)}
+
+  #formula{position:absolute;left:16px;bottom:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:10px 14px;z-index:25;max-width:min(660px,calc(100% - 350px));
+    box-shadow:0 2px 10px rgba(38,37,31,.07)}
+  #formula .ft{font-size:10.5px;font-weight:600;color:var(--text-3);letter-spacing:.6px;margin-bottom:5px}
+  #formula .fe{font-size:13px;line-height:1.9;font-family:var(--mono)}
+  #formula sub{font-size:9.5px}
+  #formula .w{color:#8a2b2b}
+  #zoomtag{position:absolute;right:16px;bottom:16px;font-family:var(--mono);font-size:11px;
+    color:var(--text-3);background:var(--panel);border:1px solid var(--line);border-radius:7px;
+    padding:3px 9px;z-index:25}
+  @media (max-width:760px){ #panel{width:100%} #formula{max-width:calc(100% - 32px)} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SLA · 架构流程图<span>节点可拖拽 · 点击看详情 · 公式与维度已标注</span></h1>
+  <div class="tools">
+    <button id="btn-fit">适应屏幕</button>
+    <button id="btn-reset">重置布局</button>
+    <button id="btn-export">导出布局</button>
+    <button id="btn-import">导入布局</button>
+    <button id="btn-labels" class="on">边标签: 开</button>
+    <button id="btn-help">说明</button>
+    <input id="import-file" type="file" accept=".json,application/json" style="display:none">
+  </div>
+</header>
+<div class="legend" id="legend"></div>
+<div class="hint">论文: Li et al., <i>SLA: Scaling Spatial-Language-Action Model via Continual Pre-training</i> (arXiv:2611.08373v1) · 拖节点 · 拖空白平移 · 滚轮缩放 · 单击看详情 · 虚线 = 训练期引用/冻结, 实线 = 数据流</div>
+
+<div id="stage">
+  <div id="world">
+    <div id="nlayer"></div>
+    <div id="llayer"></div>
+    <svg id="edges"><defs>
+      <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse" markerUnits="strokeWidth">
+        <path d="M0.6 0.6 L9.4 5 L0.6 9.4 Z" fill="#8a8880"/>
+      </marker>
+      <marker id="arw-hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse" markerUnits="strokeWidth">
+        <path d="M0.6 0.6 L9.4 5 L0.6 9.4 Z" fill="#26251f"/>
+      </marker>
+    </defs><g id="elayer"></g></svg>
+  </div>
+</div>
+
+<aside id="panel"><button class="close" id="panel-close">×</button><div id="panel-body"></div></aside>
+
+<div id="formula">
+  <div class="ft">SLA 自适应多层对齐 + 训练目标 (Eq.4 / Eq.5 / Eq.6)</div>
+  <div class="fe">
+    z<sub>i</sub> = Σ<sub>ℓ</sub> g<sup>(ℓ)</sup><sub>i</sub> ⊙ MLP( LN( <sup>(ℓ)</sup>x<sup>V</sup><sub>i</sub> ) )<br>
+    L = L<sub>action</sub> + <span class="w">α</span>·(1/N)Σ<sub>i</sub>[ 1 − S(z<sub>i</sub>, y<sub>i</sub>) ], &nbsp; y = R[f<sub>3D</sub>(I) + E]
+  </div>
+</div>
+<div id="zoomtag">100%</div>
+
+<script>
+/* ===================== 数据模型 ===================== */
+const BR = {
+  input   : {c:'#5F5E5A', bg:'#F1EFE8', n:'输入 / 观测'},
+  data    : {c:'#A32D2D', bg:'#FCEBEB', n:'统一语料 (Sec.3.3)'},
+  backbone: {c:'#185FA5', bg:'#E6F1FB', n:'π0.5 主干'},
+  teacher : {c:'#854F0B', bg:'#FAEEDA', n:'OmniVGGT 教师 (frozen)'},
+  align   : {c:'#0F6E56', bg:'#E1F5EE', n:'对齐分支 (仅训练期)'},
+  train   : {c:'#993556', bg:'#FBEAF0', n:'两阶段训练'},
+  output  : {c:'#534AB7', bg:'#EEEDFE', n:'部署 / 结果'},
+  note    : {c:'#8a8880', bg:'#FFFFFF', n:'说明'},
+};
+const SHAPE_CLASS = {input:'i', data:'l', backbone:'a', teacher:'d', align:'v', train:'p', output:'k', note:'i'};
+
+const NODES = [
+/* ---------- 说明 ---------- */
+{id:'note_overview', br:'note', x:-1050, y:-420, t:'SLA 与 SF 的关系', s:'从后训练技巧 → 基础模型能力',
+ note:'Spatial Forcing 只在 post-training 加空间对齐，是任务相关的外挂；SLA 把同一套隐式对齐扩展到 continual pre-training，让空间理解成为可迁移的基础模型能力，并在下游 post-training 继续保留。',
+ detail:'三处关键升级：① 教师从 VGGT 换成 OmniVGGT，能吃部分可得的相机标定/深度；② 固定第 24 层 → 自适应多层门控聚合，应对异构数据；③ 引入概率式 state dropout，防止策略抄本体状态的捷径。所有辅助组件只在训练期存在，可直接复用预训练 π0.5 权重、推理架构完全不变。',
+ code:'Sec.1 Introduction / Sec.3.2'},
+{id:'note_results', br:'note', x:-1050, y:840, t:'关键结果', s:'仿真 + 真机',
+ note:'LIBERO-Plus 87.4%(π0.5 84.4 / SF 85.1)；RoboTwin 2.0 Clean2Clean 86.0 / Clean2Random 72.3 / 平均 79.2(SF 68.7)；RoboCasa-Panda 68.4%(仅 50 demos/task)；RoboDojo-Real 33.9% SR(π0.5 12.8%)。',
+ detail:'8 个真机部署条件平均 83.8%，比 π0.5 高 24.0 个百分点。数据缩放实验(5%/25%/50%/100%)显示：两阶段都用空间对齐，在每个数据比例上都优于任一单阶段方案。',
+ code:'Sec.4.3 / Sec.4.4 / Sec.4.5'},
+
+/* ---------- 统一语料 ---------- */
+{id:'data_sources', br:'data', x:-680, y:-420, t:'6 个异构机器人数据源', s:'continual pre-training corpus',
+ shapes:['1,713.9K episodes','1,504 tasks','14,330 hours'],
+ note:'InternData-A1 630K / AgiBotWorld-Beta 168K / RoboCasa365-Pretrain 630K / RoboCOIN 183K / DROID 95K / MolmoAct 7.9K；覆盖不同本体、任务、场景、外观。',
+ detail:'混合真机与仿真、单臂与双臂。为保证对比公平，语料排除了下游 benchmark 数据以避免评测泄漏。',
+ code:'Sec.3.3.1 / Table 1'},
+{id:'data_unify', br:'data', x:-680, y:-180, t:'统一状态 / 动作表示', s:'EEF-centric，跨本体共享',
+ shapes:['绝对 EEF 状态 = 观测','chunk-wise ΔEEF = 预测目标','坐标: +x 前 / +y 左 / +z 上'],
+ note:'不用关节角(各本体不兼容)，改用末端执行器位姿：单臂原点取臂基座，双臂取两臂基座中点；刚性变换把各源数据映射到统一机器人中心坐标系。',
+ detail:'旋转用旋转向量 + SO(3) 复合，避免欧拉角跨 ±2π 缠绕产生异常值：Δp = p_t − p_0，ΔR = R_t R_0ᵀ，Δr = Log(ΔR)∨。chunk 内每个动作都以同一个当前 pose 为参考，而非逐步累积；实验表明 channel-wise 归一化显著优于三通道共享尺度。',
+ code:'Sec.3.3.2, Eq.(8)(9)(10) / Fig.3'},
+{id:'data_filter', br:'data', x:-680, y:70, t:'下采样与过滤', s:'去冗余 / 去异常',
+ shapes:['InternData-A1: 3% / 10%','RoboCasa365: 0.5% / 15%','保留原始时间采样率'],
+ note:'按任务下采样整条 episode，抑制脚本式仿真数据的规律性重复；过滤掉灵巧手、含底座移动、异常臂速、静止 idle 帧。',
+ detail:'目的是让各来源 episode 数处于可比量级，避免少数场景/任务主导混合语料，同时保持与控制设定一致。',
+ code:'Sec.3.3.2 Downsampling / Filtering'},
+{id:'state_dropout', br:'data', x:-680, y:320, t:'概率式 State Dropout', s:'训练时随机遮蔽本体状态',
+ shapes:['按样本丢弃整个 state token 段','保留指令 + 图像 token','推理时关闭'],
+ note:'本体状态很精确，但容易成为捷径：策略把特定状态与示范轨迹绑定，而不响应场景视觉变化。遮蔽状态迫使策略依赖视觉线索。',
+ detail:'与空间对齐互补——一个把几何写进视觉表示，一个逼策略真的去用视觉表示。代码是 StateDropout(probability)，用 state_mask = np.random.random() >= p 实现。',
+ code:'Sec.3.2.4 / code: SLA/src/openpi/transforms.py:116 / config.py state_dropout_prob'},
+
+/* ---------- 输入 ---------- */
+{id:'in_rgb', br:'input', x:-300, y:-420, t:'多视角 RGB', s:'I (primary + wrist)',
+ shapes:['推理唯一必需的视觉输入'],
+ note:'与训练时的图像观测一致；推理时不需要深度图或相机标定作为策略输入。',
+ code:'Sec.3.2.1 / Sec.3.2.2'},
+{id:'in_geom', br:'input', x:-300, y:-180, t:'可选几何标注', s:'部分可用',
+ shapes:['相机内参 / 外参','深度图','缺失即 placeholder'],
+ note:'只喂给训练期的外部 3D 教师，不进策略。有的数据集有标定与深度，有的只有部分标注或完全没有。',
+ detail:'SLA 的核心工程动机：丢弃这些标注会浪费几何约束，强制要求完整标注又会把大量有价值的示范排除在外——所以教师必须能吃"不均匀可得"的几何输入。',
+ code:'Sec.3.2.2'},
+{id:'in_lang', br:'input', x:-300, y:70, t:'语言指令', s:'task instruction',
+ shapes:['M 个 linguistic tokens'],
+ note:'与视觉 token 一起构成 prefix，动作以其为条件。',
+ code:'Sec.3.1, Eq.(1)'},
+{id:'in_state', br:'input', x:-300, y:320, t:'机器人本体状态', s:'state token',
+ shapes:['绝对 EEF 状态'],
+ note:'训练时经 State Dropout 随机遮蔽；推理时正常输入。',
+ code:'Sec.3.2.4 / Sec.3.3.2'},
+
+/* ---------- π0.5 主干 ---------- */
+{id:'pi05', br:'backbone', x:100, y:-420, t:'预训练 π₀.₅ 策略', s:'直接初始化，不改架构',
+ shapes:['PaliGemma VLM','flow-matching action expert','连续动作 chunk'],
+ note:'SLA 从预训练 π0.5 权重出发继续训练，保留其机器人通用知识；VLM 主干与动作生成头都不改。',
+ detail:'架构兼容性是关键：因为空间监督只作用于中间视觉 token，不需要新增输入模态或改动作头，所以能直接复用预训练权重——这正是 continual pre-training 成立的前提。',
+ code:'Sec.1 / Sec.3.2.1 / Sec.4.2'},
+{id:'vlm_layers', br:'backbone', x:100, y:-180, t:'多层视觉 tokens', s:'(ℓ)x^V, ℓ = 1 ... L',
+ shapes:['每个 causal attention 层后都可取','N = 跨视角视觉 token 数'],
+ note:'与 SF 只取第 24 层不同，SLA 保留所有 L 层的视觉 token 供自适应聚合。',
+ detail:'异构语料里，适合某个域的层未必适合另一个域；场景、纹理、本体差异要求每层贡献能随观测内容变化。',
+ code:'Sec.3.2.1 / Sec.3.2.3'},
+{id:'action_chunk', br:'backbone', x:100, y:70, t:'动作 chunk', s:'flow matching 输出',
+ shapes:['连续动作序列','K 个 action tokens'],
+ note:'动作专家以视觉与语言表示为条件生成动作；视觉 token 的空间质量直接决定动作精度。',
+ code:'Sec.3.1, Eq.(1)(2)'},
+{id:'loss_action', br:'train', x:100, y:320, t:'动作损失', s:'L_action',
+ shapes:['L[G({x^A}), A_gt]'],
+ note:'标准动作学习目标，两个训练阶段都保留。',
+ code:'Sec.3.1, Eq.(2) / Sec.3.2.1, Eq.(6)'},
+
+/* ---------- 教师 ---------- */
+{id:'omnivggt', br:'teacher', frozen:true, x:-300, y:600, t:'OmniVGGT 教师', s:'f3D，全程冻结',
+ shapes:['基于 VGGT','交替 frame-wise / cross-view attention','GeoAdapter: 相机分支 + 深度分支'],
+ note:'把 RGB 与"部分可得"的相机内参/外参、深度图统一编码进一个隐表示；缺失标注用 placeholder tokens 补齐，随机多模态融合让模型见过包括纯 RGB 在内的各种输入组合。',
+ detail:'取 backbone 最后一层特征作为监督信号。梯度只更新 VLA、对齐投影器与门控，f3D 完全冻结(code 里 align_target_model 可选 vggt / omnivggt)。',
+ code:'Sec.3.2.2 / code: SLA/src/omnivggt/models/omnivggt.py / align_utils.py:38'},
+{id:'target_y', br:'teacher', x:100, y:600, t:'空间目标 y', s:'y = R[f3D(I) + E]',
+ shapes:['加位置编码 E','bilinear 重采样到 token 分辨率','逐 token 同视角同位置配对'],
+ note:'教师特征网格叠加位置编码后，双线性重采样到 VLA 视觉 token 分辨率，得到每个 token 位置的目标 y_i(Eq.3)。',
+ detail:'位置编码保证被监督 token 在自回归序列中保留关键位置顺序；重采样实现见 vggt/heads/utils.py 的 custom_pooling 与 align_utils.py。',
+ code:'Sec.3.2.1, Eq.(3) / code: SLA/src/openpi/training/align_utils.py'},
+
+/* ---------- 对齐分支 ---------- */
+{id:'ln_mlp', br:'align', x:500, y:-420, t:'LN + 共享两层 MLP', s:'对齐投影器',
+ shapes:['LayerNorm','2-layer MLP','参数跨层共享'],
+ note:'每个视觉 token 先做 LN 再过两层 MLP，使特征维度与目标兼容；归一化与 MLP 参数在所有层之间共享。',
+ detail:'论文记号上 SF 写 Γ(BatchNorm)、SLA 写 LN；但两版代码其实都用 nn.LayerNorm 作 vlm_norm（SF: --use_vlm_norm True）。真正的设计差异是：SLA 的归一化与 MLP 参数跨所有 L 层共享，从而使多层同时监督稳定成立。',
+ code:'Sec.3.2.1, Eq.(4) / code: SLA/src/openpi/models_pytorch/projectors.py:36'},
+{id:'gates', br:'align', x:500, y:-180, t:'特征相关门控', s:'adaptive layer selection',
+ shapes:['g^(ℓ)_i = σ(W_g · (ℓ)x^V_i + b_g)','token-wise + channel-wise','门控参数跨层共享'],
+ note:'借鉴 Gated Attention：对每个视觉 token、每个 VLA transformer 层学一个 sigmoid 门，由未投影的 embedding 本身决定该层贡献多少(Eq.7)。',
+ detail:'这取代了 SF 需要手工挑的第 24 层：不同视觉线索(深度、通道信息)可同时贡献到统一空间表示；门控只属于辅助训练分支，部署时不产生任何策略计算。',
+ code:'Sec.3.2.3, Eq.(7) / Sec.4.4.2'},
+{id:'fusion', br:'align', x:500, y:70, t:'多层聚合 z', s:'F[{ (ℓ)x^V }]',
+ shapes:['z_i = Σ_ℓ g^(ℓ)_i ⊙ MLP(LN((ℓ)x^V_i))'],
+ note:'把各层投影特征按门控逐元素加权求和，得到用于对齐的统一视觉表示 z_i(Eq.4)。',
+ code:'Sec.3.2.1, Eq.(4)'},
+{id:'loss_align', br:'align', x:500, y:320, t:'对齐损失', s:'L_align',
+ shapes:['(1/N)Σ_i [1 − S(z_i, y_i)]','S = cosine similarity'],
+ note:'最大化聚合视觉表示与教师空间目标的余弦相似度(Eq.5)；N 是跨视角视觉 token 总数。',
+ detail:'代码里 align_proj(vision_hidden, vggt_hidden, align_mask, (len(images), H, W)) 直接返回该损失，align_mask 处理不同样本的有效 token/几何标注。',
+ code:'Sec.3.2.1, Eq.(5) / code: SLA/src/openpi/models_pytorch/pi0_align_pytorch.py:527'},
+{id:'loss_total', br:'train', x:500, y:600, t:'总训练目标', s:'L = L_action + α L_align',
+ shapes:['α 控制空间对齐强度','梯度: VLA + MLP + gates','教师 frozen'],
+ note:'动作损失与对齐损失加权求和(Eq.6)；梯度不回传到 OmniVGGT。',
+ code:'Sec.3.2.1, Eq.(6) / code: SLA/scripts/train_align.py'},
+
+/* ---------- 训练与部署 ---------- */
+{id:'stage1', br:'train', x:900, y:-420, t:'Stage 1 · 持续预训练', s:'36k steps',
+ shapes:['effective batch 4,608','48 × NVIDIA H100 · ≈110h','lr 5e-5 → 1e-5 cosine'],
+ note:'在统一语料上做大规模持续预训练，把空间理解写进基础模型；warmup 1k 步到 5e-5，cosine 衰减到 30k 步的 1e-5 后保持恒定。',
+ detail:'梯度累积 2 个 microstep × global batch 2304 = 4608。配置见 external_config/pretrain.py；训练入口 scripts/train_align.py。',
+ code:'Sec.4.2 / code: SLA/src/openpi/external_config/pretrain.py'},
+{id:'stage2', br:'train', x:900, y:-180, t:'Stage 2 · 下游后训练', s:'保留空间对齐',
+ shapes:['LIBERO-Plus 512 / 30k','RoboTwin 256 / 30k','RoboCasa 64 / 60k · 真机 64 / 20k'],
+ note:'针对具体 benchmark/真机任务做 post-training，且继续使用空间对齐分支；不是只在预训练加一次。',
+ detail:'数据缩放实验(5%/25%/50%/100%)表明"两阶段都对齐"在每个数据比例上都优于只在预训练或只在后训练对齐——这是 SLA 相对 SF 的核心结论。',
+ code:'Sec.1 / Sec.4.2 / Sec.4.4.1'},
+{id:'deploy', br:'output', x:900, y:70, t:'部署 · 原推理架构', s:'零额外开销',
+ shapes:['丢弃教师 / 投影器 / 门控','丢弃 state dropout','无需深度图 / 相机标定'],
+ note:'部署时策略与原始 π0.5 完全同构：既不用外部感知模型，也不改 VLM 或动作头。',
+ detail:'这也是"可直接复用预训练 VLA 权重"的兑现点：所有新增模块都是训练期辅助分支。',
+ code:'Sec.3.2.1 / Sec.3.2.4 / Sec.1'},
+{id:'memory', br:'output', x:900, y:320, t:'Memory 机制', s:'RoboDojo-Real 后训练专用',
+ shapes:['历史图像输入','推理时保留','对齐分支仍只训练期'],
+ note:'为长时程任务与长期记忆需求，RoboDojo-Real 的 post-training 额外引入 memory 机制；空间对齐分支仍只在训练期使用，历史图像输入在推理时保留。',
+ detail:'代码入口在外部仓库 XPolicyLab 的 PR #237(SLA_Memory)，本仓库只保存入口引用。',
+ code:'Sec.4.3.4 / Appendix B / code: SLA/README.md'},
+{id:'results', br:'output', x:1320, y:70, t:'评测与部署结果', s:'4 个 benchmark + 8 个真机条件',
+ shapes:['LIBERO-Plus 87.4%','RoboTwin 2.0 avg 79.2%','RoboCasa-Panda 68.4%','真机平均 83.8% (+24.0pp)'],
+ note:'仿真：LIBERO-Plus(7 种扰动)、RoboTwin 2.0(Clean2Clean / Clean2Random)、RoboCasa-Panda、RoboDojo-Real；真机：双臂 Piper + 单臂 Franka 上 8 种部署条件 A–H。',
+ detail:'RoboDojo-Real 用单一策略联合适配 ARX X5 / Piper / Piper X 三种本体，Score 42.3、SR 33.9%；真机每条件按 50 个物体实例计成功率。',
+ code:'Sec.4.1 / Sec.4.3 / Sec.4.5'},
+{id:'note_ablation', br:'note', x:1320, y:600, t:'分析结论', s:'Sec.4.4',
+ note:'自适应层选择、state dropout、旋转向量表示、相机标定四项消融分别验证了各设计的作用；其中旋转向量 + SO(3) 复合消除 ±2π 缠绕离群值。',
+ detail:'Table 2-5 与 Fig.4 的数据缩放曲线共同支撑：空间理解应当作为基础模型能力在持续预训练阶段建立，并在下游适配阶段继续强化。',
+ code:'Sec.4.4 / Appendix A'},
+];
+
+const EDGES = [
+  /* 数据管线 */
+  ['data_sources','data_unify','异构示范'],
+  ['data_unify','data_filter','统一表示'],
+  ['data_filter','stage1','预训练语料'],
+  ['data_unify','in_state','EEF 状态'],
+  ['data_unify','stage2','统一动作空间'],
+  /* 输入 → 主干 */
+  ['in_rgb','pi05','RGB 图像'],
+  ['in_lang','pi05','语言 token'],
+  ['in_state','state_dropout','本体状态'],
+  ['state_dropout','pi05','随机遮蔽后'],
+  ['state_dropout','stage1','两阶段都启用',true],
+  ['pi05','vlm_layers','L 层视觉 token'],
+  ['pi05','action_chunk','flow matching'],
+  ['action_chunk','loss_action','预测'],
+  ['data_unify','loss_action','A_gt'],
+  /* 教师分支 */
+  ['in_rgb','omnivggt','RGB'],
+  ['in_geom','omnivggt','部分几何标注'],
+  ['omnivggt','target_y','最后一层特征'],
+  /* 对齐分支 */
+  ['vlm_layers','ln_mlp','(ℓ)x^V'],
+  ['vlm_layers','gates','未投影 embedding'],
+  ['ln_mlp','fusion','投影特征'],
+  ['gates','fusion','门控 g'],
+  ['fusion','loss_align','z_i'],
+  ['target_y','loss_align','y_i'],
+  ['loss_align','loss_total','α·L_align'],
+  ['loss_action','loss_total','L_action'],
+  ['loss_total','pi05','梯度更新',true],
+  ['loss_total','ln_mlp','梯度更新',true],
+  ['loss_total','gates','梯度更新',true],
+  ['loss_total','omnivggt','frozen 不更新',true],
+  /* 两阶段 */
+  ['loss_total','stage1','Stage 1 目标'],
+  ['loss_total','stage2','Stage 2 目标'],
+  ['stage1','stage2','预训练权重'],
+  ['memory','stage2','后训练加入',true],
+  ['stage2','deploy','丢弃辅助分支'],
+  ['deploy','results','评测'],
+  ['results','note_ablation','结论',true],
+];
+
+/* ===================== 渲染 ===================== */
+const stage = document.getElementById('stage');
+const world = document.getElementById('world');
+const nlayer = document.getElementById('nlayer');
+const llayer = document.getElementById('llayer');
+const elayer = document.getElementById('elayer');
+const svg = document.getElementById('edges');
+const panel = document.getElementById('panel');
+const panelBody = document.getElementById('panel-body');
+const zoomtag = document.getElementById('zoomtag');
+
+const nodeById = {};
+const edgeEls = [];
+let selected = null;
+const LS_KEY = 'sla-flow-v1';
+
+(function(){
+  const lg = document.getElementById('legend');
+  Object.entries(BR).forEach(([k,v])=>{
+    if(k==='note') return;
+    const d = document.createElement('span');
+    d.className = 'chip';
+    d.innerHTML = `<i style="background:${v.c}"></i>${v.n}`;
+    lg.appendChild(d);
+  });
+  const extra = document.createElement('span');
+  extra.className = 'chip';
+  extra.innerHTML = `<i style="background:#fff;border:1.5px dashed #8a8880"></i>虚线框 = frozen 权重`;
+  lg.appendChild(extra);
+})();
+
+function shapeClass(n){ return SHAPE_CLASS[n.br] || 'i'; }
+
+function buildNodes(){
+  NODES.forEach(n=>{
+    n.w = 240;
+    const el = document.createElement('div');
+    el.className = 'node' + (n.frozen ? ' frozen' : '') + (n.br==='note' ? ' note' : '');
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+    el.dataset.id = n.id;
+    const br = BR[n.br];
+    const shapes = (n.shapes||[]).map(s=>`<span class="shape ${shapeClass(n)}">${s}</span>`).join('');
+    el.innerHTML =
+      `<div class="nhead"><i style="background:${br.c}"></i><span class="ntitle">${n.t}</span></div>` +
+      (n.s ? `<div class="nsub">${n.s}</div>` : '') +
+      (shapes ? `<div class="shapes">${shapes}</div>` : '') +
+      (n.note ? `<div class="note-txt">${n.note}</div>` : '');
+    nlayer.appendChild(el);
+    n.el = el;
+    nodeById[n.id] = n;
+    el.addEventListener('pointerdown', e=>onNodeDown(e, n));
+    el.addEventListener('pointerenter', ()=>highlight(n.id, true));
+    el.addEventListener('pointerleave', ()=>highlight(n.id, false));
+  });
+  NODES.forEach(n=>{ n.h = n.el.offsetHeight; });
+}
+
+function anchor(n, side){
+  if(side==='r') return {x:n.x+n.w, y:n.y+n.h/2};
+  if(side==='l') return {x:n.x,     y:n.y+n.h/2};
+  if(side==='t') return {x:n.x+n.w/2, y:n.y};
+  return {x:n.x+n.w/2, y:n.y+n.h};
+}
+function pickSides(a,b){
+  const ac = {x:a.x+a.w/2, y:a.y+a.h/2}, bc = {x:b.x+b.w/2, y:b.y+b.h/2};
+  const dx = bc.x-ac.x, dy = bc.y-ac.y;
+  if(Math.abs(dx) >= Math.abs(dy)) return dx>0 ? ['r','l'] : ['l','r'];
+  return dy>0 ? ['b','t'] : ['t','b'];
+}
+function pathD(p1,p2,horiz){
+  if(horiz){
+    const k = Math.max(40, Math.min(150, Math.abs(p2.x-p1.x)*0.5));
+    return `M ${p1.x} ${p1.y} C ${p1.x+k} ${p1.y}, ${p2.x-k} ${p2.y}, ${p2.x} ${p2.y}`;
+  }
+  const k = Math.max(30, Math.min(110, Math.abs(p2.y-p1.y)*0.5));
+  return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y+k}, ${p2.x} ${p2.y-k}, ${p2.x} ${p2.y}`;
+}
+function bezMid(p1,p2,horiz){
+  let c1,c2;
+  if(horiz){
+    const k = Math.max(40, Math.min(150, Math.abs(p2.x-p1.x)*0.5));
+    c1 = {x:p1.x+k, y:p1.y}; c2 = {x:p2.x-k, y:p2.y};
+  }else{
+    const k = Math.max(30, Math.min(110, Math.abs(p2.y-p1.y)*0.5));
+    c1 = {x:p1.x, y:p1.y+k}; c2 = {x:p2.x, y:p2.y-k};
+  }
+  return {x:(p1.x+3*c1.x+3*c2.x+p2.x)/8, y:(p1.y+3*c1.y+3*c2.y+p2.y)/8};
+}
+const SIDE_OVERRIDE = {};
+function sidesFor(a,b){
+  const ov = SIDE_OVERRIDE[a.id+'>'+b.id];
+  if(ov) return [ov[0], ov[1]];
+  return pickSides(a,b);
+}
+
+function buildEdges(){
+  svg.setAttribute('width', 3400);
+  svg.setAttribute('height', 1700);
+  EDGES.forEach(([from,to,label,dashed])=>{
+    const a = nodeById[from], b = nodeById[to];
+    const casing = document.createElementNS('http://www.w3.org/2000/svg','path');
+    casing.setAttribute('class','casing');
+    elayer.appendChild(casing);
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('class','edge' + (dashed?' dashed':''));
+    p.setAttribute('marker-end','url(#arw)');
+    elayer.appendChild(p);
+    const lb = document.createElement('div');
+    lb.className = 'elabel';
+    lb.textContent = label;
+    if(!label) lb.style.display = 'none';
+    llayer.appendChild(lb);
+    edgeEls.push({a,b,p,casing,lb});
+  });
+  redrawEdges();
+}
+function redrawEdges(){
+  edgeEls.forEach(e=>{
+    const [sa,sb] = sidesFor(e.a,e.b);
+    const p1 = anchor(e.a,sa), p2 = anchor(e.b,sb);
+    const horiz = (sa==='r'||sa==='l');
+    const d = pathD(p1,p2,horiz);
+    e.p.setAttribute('d', d);
+    e.casing.setAttribute('d', d);
+    const m = bezMid(p1,p2,horiz);
+    if(horiz){ e.lb.style.left = m.x+'px'; e.lb.style.top = (m.y-16)+'px'; }
+    else     { e.lb.style.left = (m.x-18)+'px'; e.lb.style.top = m.y+'px'; }
+  });
+}
+function redrawNode(n){
+  n.el.style.left = n.x+'px';
+  n.el.style.top  = n.y+'px';
+  redrawEdges();
+}
+
+/* ===================== 交互 ===================== */
+let view = {x:0, y:0, k:1};
+function applyView(){
+  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+  zoomtag.textContent = Math.round(view.k*100)+'%';
+  saveState();
+}
+function clampK(k){ return Math.max(0.2, Math.min(2.4, k)); }
+
+function onNodeDown(e, n){
+  if(e.button!==0) return;
+  e.stopPropagation();
+  n.el.setPointerCapture(e.pointerId);
+  const sx = e.clientX, sy = e.clientY, ox = n.x, oy = n.y;
+  let moved = 0;
+  n.el.classList.add('dragging');
+  const mv = ev=>{
+    const dx = (ev.clientX-sx)/view.k, dy = (ev.clientY-sy)/view.k;
+    moved = Math.max(moved, Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy));
+    n.x = ox+dx; n.y = oy+dy;
+    redrawNode(n);
+  };
+  const up = ()=>{
+    n.el.classList.remove('dragging');
+    n.el.releasePointerCapture(e.pointerId);
+    n.el.removeEventListener('pointermove', mv);
+    n.el.removeEventListener('pointerup', up);
+    if(moved < 5) selectNode(n);
+    saveState();
+  };
+  n.el.addEventListener('pointermove', mv);
+  n.el.addEventListener('pointerup', up);
+}
+
+stage.addEventListener('pointerdown', e=>{
+  if(e.target.closest('.node')) return;
+  closePanel();
+  stage.classList.add('panning');
+  const sx = e.clientX, sy = e.clientY, ox = view.x, oy = view.y;
+  const mv = ev=>{ view.x = ox + (ev.clientX-sx); view.y = oy + (ev.clientY-sy); applyView(); };
+  const up = ()=>{
+    stage.classList.remove('panning');
+    window.removeEventListener('pointermove', mv);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', mv);
+  window.addEventListener('pointerup', up);
+});
+
+stage.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const k2 = clampK(view.k * (e.deltaY<0 ? 1.12 : 0.89));
+  view.x = mx - (mx - view.x) * k2/view.k;
+  view.y = my - (my - view.y) * k2/view.k;
+  view.k = k2;
+  applyView();
+}, {passive:false});
+
+function highlight(id, on){
+  edgeEls.forEach(e=>{
+    const touch = (e.a.id===id || e.b.id===id);
+    if(on){
+      if(touch){ e.p.classList.add('hl'); e.p.classList.remove('dim'); e.p.setAttribute('marker-end','url(#arw-hl)'); }
+      else e.p.classList.add('dim');
+      if(touch && e.lb.textContent) e.lb.style.opacity = 1;
+    }else{
+      e.p.classList.remove('hl','dim');
+      e.p.setAttribute('marker-end','url(#arw)');
+      e.lb.style.opacity = '';
+    }
+  });
+  NODES.forEach(n=>{
+    if(!on) { n.el.classList.remove('dim'); return; }
+    const touch = edgeEls.some(e=>(e.a.id===id||e.b.id===id) && (e.a.id===n.id||e.b.id===n.id));
+    n.el.classList.toggle('dim', !touch && n.id!==id);
+  });
+}
+
+function selectNode(n){
+  NODES.forEach(m=>m.el.classList.remove('selected'));
+  n.el.classList.add('selected');
+  selected = n;
+  const br = BR[n.br];
+  const ins = [], outs = [];
+  EDGES.forEach(([f,t,l])=>{ if(t===n.id) ins.push(nodeById[f].t); if(f===n.id) outs.push(nodeById[t].t); });
+  panelBody.innerHTML =
+    `<h2>${n.t}</h2>` +
+    (n.s?`<div class="psub">${n.s}</div>`:'') +
+    `<span class="ptag" style="background:${br.bg};color:${br.c}">${br.n}${n.frozen?' · frozen':''}</span>` +
+    (n.shapes?`<h3>维度 / 形式</h3><div class="pshapes">${n.shapes.map(s=>`<span class="shape ${shapeClass(n)}">${s}</span>`).join('')}</div>`:'') +
+    (n.detail?`<h3>说明</h3><div class="pbody">${n.detail}</div>`:'') +
+    (n.note?`<h3>要点</h3><div class="pbody">${n.note}</div>`:'') +
+    (ins.length?`<h3>输入来自</h3><div class="pconn">${ins.map(x=>`<b>·</b> ${x}`).join('<br>')}</div>`:'') +
+    (outs.length?`<h3>输出到</h3><div class="pconn">${outs.map(x=>`<b>·</b> ${x}`).join('<br>')}</div>`:'') +
+    (n.code?`<h3>论文 / 源码位置</h3><div class="pcode">${n.code}</div>`:'');
+  panel.classList.add('open');
+}
+function closePanel(){ panel.classList.remove('open'); NODES.forEach(m=>m.el.classList.remove('selected')); selected=null; }
+document.getElementById('panel-close').addEventListener('click', closePanel);
+
+function fit(){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  NODES.forEach(n=>{ x0=Math.min(x0,n.x); y0=Math.min(y0,n.y); x1=Math.max(x1,n.x+n.w); y1=Math.max(y1,n.y+n.h); });
+  const pad = 56;
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  const k = clampK(Math.min((sw-pad*2)/(x1-x0), (sh-pad*2)/(y1-y0)));
+  view.k = k;
+  view.x = (sw - (x1-x0)*k)/2 - x0*k;
+  view.y = (sh - (y1-y0)*k)/2 - y0*k;
+  applyView();
+}
+document.getElementById('btn-fit').addEventListener('click', fit);
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  localStorage.removeItem(LS_KEY);
+  NODES.forEach(n=>{ n.x=n.px; n.y=n.py; });
+  NODES.forEach(n=>{ n.x=n.px; n.y=n.py; redrawNode(n); });
+  fit();
+});
+let showLabels = true;
+const btnLabels = document.getElementById('btn-labels');
+btnLabels.addEventListener('click', ()=>{
+  showLabels = !showLabels;
+  btnLabels.classList.toggle('on', showLabels);
+  btnLabels.textContent = showLabels ? '边标签: 开' : '边标签: 关';
+  edgeEls.forEach(ed=>{ ed.lb.classList.toggle('hide', !showLabels); });
+});
+document.getElementById('btn-help').addEventListener('click', ()=>{
+  panelBody.innerHTML =
+    `<h2>使用说明</h2>
+     <div class="pbody" style="line-height:2">
+     <b>拖动节点</b>:按住拖动,自动重排连线。<b>平移</b>:拖空白处。<b>缩放</b>:滚轮。<br>
+     <b>单击节点</b>:右侧显示维度、说明、要点、输入输出与论文/源码位置。<br>
+     <b>悬停</b>:高亮相关链路。<b>适应屏幕 / 重置</b>:看全貌 / 复原。<br><br>
+     <b>读图主线</b>:<br>
+     ① 最左 = 统一语料:6 大数据源 → EEF 统一表示 → 下采样过滤 → State Dropout;<br>
+     ② 中上 = π<sub>0.5</sub> 主干:RGB/语言/状态 → 多层视觉 token + 动作 chunk,配 L<sub>action</sub>;<br>
+     ③ 左下 = 冻结教师 OmniVGGT:吃 RGB 与部分可得的标定/深度,产出目标 y = R[f<sub>3D</sub>(I)+E];<br>
+     ④ 中间 = 对齐分支:LN+共享 MLP 与特征相关门控一起把 L 层 token 聚合成 z,与 y 做 cosine 得 L<sub>align</sub>;<br>
+     ⑤ 两损失合成 L,驱动 <b>Stage 1 持续预训练</b> → <b>Stage 2 后训练</b>(两阶段都对齐);<br>
+     ⑥ 部署时教师/投影器/门控/state dropout 全部丢弃,回到原 π<sub>0.5</sub> 推理架构。<br><br>
+     <b>与 SF 图的对照</b>:VGGT→OmniVGGT、固定第 24 层→自适应门控多层、BN→LN、新增 state dropout 与两阶段训练。<br>
+     <b>虚线</b> = 训练期引用 / 冻结 / 梯度;<b>虚线框</b> = frozen 权重。
+     </div>`;
+  panel.classList.add('open');
+});
+
+function exportLayout(){
+  const pos = {};
+  NODES.forEach(n=>{ pos[n.id] = [Math.round(n.x), Math.round(n.y)]; });
+  const data = { key: LS_KEY, savedAt: new Date().toISOString(), pos, view };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sla-flow-layout.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function applyLayout(st){
+  if(st.pos) NODES.forEach(n=>{ if(st.pos[n.id]){ n.px = n.x; n.py = n.y; n.x = st.pos[n.id][0]; n.y = st.pos[n.id][1]; } });
+  if(st.view) view = st.view;
+  NODES.forEach(redrawNode);
+  applyView();
+  saveState();
+}
+function importLayout(file){
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    try{
+      const st = JSON.parse(fr.result);
+      if(!st.pos) throw new Error('缺少 pos 字段');
+      applyLayout(st);
+      alert('布局已导入并保存到本地浏览器。');
+    }catch(err){ alert('导入失败:' + err.message); }
+  };
+  fr.readAsText(file);
+}
+document.getElementById('btn-export').addEventListener('click', exportLayout);
+const importInput = document.getElementById('import-file');
+document.getElementById('btn-import').addEventListener('click', ()=> importInput.click());
+importInput.addEventListener('change', ()=>{ if(importInput.files[0]) importLayout(importInput.files[0]); importInput.value=''; });
+
+function saveState(){
+  try{
+    const pos = {};
+    NODES.forEach(n=>{ pos[n.id] = [Math.round(n.x), Math.round(n.y)]; });
+    localStorage.setItem(LS_KEY, JSON.stringify({pos, view}));
+  }catch(e){}
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    const st = JSON.parse(raw);
+    if(st.pos) NODES.forEach(n=>{ if(st.pos[n.id]){ n.px = n.x; n.py = n.y; n.x = st.pos[n.id][0]; n.y = st.pos[n.id][1]; } });
+    if(st.view) view = st.view;
+    return true;
+  }catch(e){ return false; }
+}
+
+NODES.forEach(n=>{ n.px = n.x; n.py = n.y; });
+buildNodes();
+buildEdges();
+NODES.forEach(redrawNode);
+fit();
+window.addEventListener('resize', ()=>{});
+</script>
+</body>
+</html>

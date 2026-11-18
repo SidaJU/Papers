@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "collected_on": "2026-11-18",
+  "work": "GeoPredict: Leveraging Predictive Kinematics and 3D Gaussian Geometry for Precise VLA Manipulation",
+  "scope": "官方会议原文、arXiv v2、完整官方补充材料，以及作者仓库当前提交的全部跟踪源码；不含外部权重、数据集、软件环境或完整 Git 历史。",
+  "papers": [
+    {
+      "file": "GeoPredict.pdf",
+      "edition": "CVPR 2026 官方开放获取会议版",
+      "source_url": "https://openaccess.thecvf.com/content/CVPR2026/papers/Qian_GeoPredict_Leveraging_Predictive_Kinematics_and_3D_Gaussian_Geometry_for_Precise_CVPR_2026_paper.pdf",
+      "pages": 11,
+      "bytes": 2965344,
+      "sha256": "f1155061464799b376176dcf89c4b30ab3ebb904bbcbb7d51e73eb07546f4f81"
+    },
+    {
+      "file": "GeoPredict_arxiv_v2.pdf",
+      "arxiv_id": "2512.16811v2",
+      "source_url": "https://arxiv.org/pdf/2512.16811v2",
+      "pages": 11,
+      "bytes": 2589561,
+      "sha256": "1422b37a6832c2c246b5af265dacd19f519a9fa5bd914a05e94eeb8632253a74"
+    },
+    {
+      "file": "GeoPredict_supplemental.pdf",
+      "edition": "CVPR 2026 官方补充材料 PDF",
+      "extracted_from": "GeoPredict_supplemental.zip",
+      "archive_member": "36288_supp/GeoPredict_CVPR_2026_Supp.pdf",
+      "pages": 4,
+      "bytes": 508716,
+      "sha256": "d4ae9c22aeb3da07dff4bf0dfa516a7cd0c5f744abef1689cc97f3f9209e399c",
+      "validation_note": "保持原包字节未重写；pypdf 可读取全部 4 页，但会忽略原文件若干无效对象偏移并发出警告。"
+    }
+  ],
+  "supplemental_archive": {
+    "file": "GeoPredict_supplemental.zip",
+    "source_url": "https://openaccess.thecvf.com/content/CVPR2026/supplemental/Qian_GeoPredict_Leveraging_Predictive_CVPR_2026_supplemental.zip",
+    "bytes": 13789461,
+    "sha256": "2ffd9e6f75f980bc09609bcc74e3872d38e3ddc0fd42c6263f04dfe1a6b04df0",
+    "contents": "4 页附录 PDF、8 个演示视频及原包元数据；ZIP 校验通过，视频未执行或转码。"
+  },
+  "code": {
+    "path": "code",
+    "repository": "https://github.com/jingjingqian75/GeoPredict",
+    "branch_at_collection": "main",
+    "commit": "5191756e8c4f16de2b63c28636341f2d4f5cdf2e",
+    "commit_date": "2026-10-14",
+    "archive_url": "https://codeload.github.com/jingjingqian75/GeoPredict/tar.gz/5191756e8c4f16de2b63c28636341f2d4f5cdf2e",
+    "storage": "普通源码文件快照；无嵌套 .git，不注册为 Papers 的子模块；保留上游原始字节和换行。",
+    "upstream_tracked_files": 30,
+    "verified_against_git_blobs": true,
+    "unresolved_lfs_pointers": 0,
+    "submodules": [],
+    "root_license": "Apache-2.0",
+    "root_license_file": "code/LICENSE.txt"
+  },
+  "release_status": {
+    "evidence": ["code/readme.md", "code/docs/train.md", "code/docs/infer.md", "code/tools/train_robocasa.py"],
+    "readme_release_history": [
+      "2026-05：作者宣布发布推理代码和检查点。",
+      "2026-07：作者宣布发布训练代码和数据集。"
+    ],
+    "observed_training_entrypoints": ["code/train_robocasa.sh", "code/tools/train_robocasa.py"],
+    "observed_evaluation_entrypoint": "code/test_robocasa.sh",
+    "qualification": "所选提交已包含 RoboCasa 训练与推理代码，不再是早期仅推理版本；没有运行验证，也不据此宣称原论文所有基准和真实实验均可完整复现。"
+  },
+  "external_resources_not_downloaded": {
+    "project_page": "https://jingjingqian75.github.io/GeoPredict-Page/",
+    "checkpoints": "https://huggingface.co/Jingjing0601/GeoPredict-Robocasa",
+    "training_dataset": "https://modelscope.cn/datasets/JingjingQian/GeoPredict-Robocasa",
+    "training_rasterizer_source": "https://github.com/ashawkey/diff-gaussian-rasterization",
+    "training_rasterizer_revision_from_author_docs": "8829d14f814fccdaf840b7b0f3021a616583c0a1",
+    "note": "未安装软件依赖，未额外镜像 pip/CUDA 依赖源码，也未下载模型和数据；按用户本轮要求收集论文与作者仓库源码。"
+  },
+  "execution": {
+    "environment_installed": false,
+    "training_or_inference_run": false,
+    "upstream_code_modified": false,
+    "committed_or_pushed_by_this_collection": false
+  }
+}
